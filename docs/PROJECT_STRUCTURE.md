@@ -13,22 +13,24 @@ gpu_cluster_testing/
 ├── 📂 .github/workflows/                  # CI/CD
 │   └── ci.yml                             # Build, test, push to ghcr.io
 │
-├── 📂 docs/                               # Documentation (6 files)
-│   ├── 🎓 HOW_IT_WORKS.md                # Architecture and data flow (500 lines)
+├── 📂 docs/                               # Documentation (8 files)
+│   ├── 📘 README.md                      # Documentation index
+│   ├── 🎓 HOW_IT_WORKS.md                # Architecture and data flow
 │   ├── 🔧 TROUBLESHOOTING.md             # Common issues (UCX/UCC, NCCL, OOM)
 │   ├── 📁 PROJECT_STRUCTURE.md           # This file
-│   ├── 🌐 INFINIBAND_CONFIGURATION.md    # NCCL/IB setup (532 lines)
-│   ├── 📊 NCCL_TESTING.md                # Bandwidth testing (320 lines)
-│   └── 🧹 CLEANUP_GUIDE.md               # Resource cleanup (448 lines)
+│   ├── 🌐 INFINIBAND_CONFIGURATION.md    # NCCL/IB setup
+│   ├── 📊 NCCL_TESTING.md                # Bandwidth testing
+│   ├── 📈 TESTING_WORKFLOW.md            # Decision trees, test sequences
+│   └── 🧹 CLEANUP_GUIDE.md               # Resource cleanup
 │
-├── 📂 examples/                           # Deployment examples
-│   ├── kubernetes-flexible-nebius-pattern.yaml
-│   ├── kubernetes-mixed-cluster.yaml
+├── 📂 examples/                           # Kubernetes deployment examples
 │   ├── kubernetes-pod-single-gpu.yaml
 │   ├── kubernetes-pod-multi-gpu-single-node.yaml
 │   ├── kubernetes-statefulset-multi-node-ddp.yaml
 │   ├── kubernetes-with-auto-cleanup.yaml
-│   └── pytorchjob-example.yaml
+│   ├── kubernetes-mixed-cluster.yaml
+│   ├── kubernetes-flexible-nebius-pattern.yaml
+│   └── kubernetes-multi-gpu-nebius-optimized.yaml
 │
 ├── 📂 scripts/                            # Runtime scripts
 │   └── 🔧 entrypoint.sh                  # Universal environment detection (241 lines)
@@ -179,16 +181,16 @@ Total                 5,048    lines
 
 ## Usage Quick Reference
 
-**Pull container**:
+**Deploy single GPU test**:
 ```bash
-docker pull ghcr.io/ahmabboud/gpu_cluster_testing:latest
+kubectl apply -f examples/kubernetes-pod-single-gpu.yaml
+kubectl logs -f pod/gpu-cluster-test-single-gpu
 ```
 
-**Run test**:
+**Deploy multi-GPU test**:
 ```bash
-docker run --gpus all --rm --ipc=host \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet18 --batch-size 128 --active-iterations 10
+kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
+kubectl logs -f pod/gpu-cluster-test-multi-gpu-single-node
 ```
 
 **Check cluster health**:

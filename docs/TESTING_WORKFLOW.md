@@ -49,23 +49,23 @@
                               |
                               v
 ┌────────────────────────────────────────────────────────────────┐
-│  Step 1.1: Single Node NVLink Test                            │
-│  $ sbatch examples/slurm-nccl-test.sh                         │
-│  Expected: 400-450 GB/s (H100)                                │
+│  Step 1.1: Single Node Multi-GPU Test                         │
+│  $ kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
+│  Expected: ~15,000 samples/sec (2× H100)                      │
 └────────────────────────────────────────────────────────────────┘
                               |
                               v
 ┌────────────────────────────────────────────────────────────────┐
-│  Step 1.2: Single Node InfiniBand Test (Forced)              │
-│  Environment: NCCL_P2P_DISABLE=1, NCCL_SHM_DISABLE=1         │
-│  Expected: 200-240 GB/s (HDR InfiniBand)                     │
+│  Step 1.2: InfiniBand Verification                           │
+│  Deploy ib-check pod (see INFINIBAND_CONFIGURATION.md)       │
+│  Expected: uverbs0-7 devices visible                         │
 └────────────────────────────────────────────────────────────────┘
                               |
                               v
 ┌────────────────────────────────────────────────────────────────┐
-│  Step 1.3: Multi-Node Test                                    │
-│  $ sbatch --nodes=4 examples/slurm-nccl-test.sh              │
-│  Expected: Consistent bandwidth across nodes                  │
+│  Step 1.3: Multi-Node DDP Test                                │
+│  $ kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
+│  Expected: Consistent NCCL communication across nodes         │
 └────────────────────────────────────────────────────────────────┘
                               |
                               v
@@ -93,21 +93,21 @@
                               v
 ┌────────────────────────────────────────────────────────────────┐
 │  Step 2.1: Single Node Training Test                          │
-│  $ sbatch examples/slurm-single-node.sbatch                   │
-│  Model: ResNet-50, Batch: 64                                  │
+│  $ kubectl apply -f examples/kubernetes-pod-single-gpu.yaml   │
+│  Model: ResNet-50, Batch: 32                                  │
 └────────────────────────────────────────────────────────────────┘
                               |
                               v
 ┌────────────────────────────────────────────────────────────────┐
 │  Step 2.2: Multi-Node Training Test                           │
-│  $ sbatch examples/slurm-multi-node.sbatch                    │
-│  Nodes: 2-4, GPUs: 8 per node                                │
+│  $ kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
+│  Nodes: 2+, GPUs: varies per node                            │
 └────────────────────────────────────────────────────────────────┘
                               |
                               v
 ┌────────────────────────────────────────────────────────────────┐
-│  Step 2.3: Transformer Bandwidth Test                         │
-│  $ sbatch examples/slurm-transformer.sbatch                   │
+│  Step 2.3: Transformer Bandwidth Test (Optional)              │
+│  Modify pod spec: --model transformer                         │
 │  Tests: Large gradient synchronization                        │
 └────────────────────────────────────────────────────────────────┘
                               |

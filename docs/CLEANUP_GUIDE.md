@@ -2,49 +2,21 @@
 
 ## Overview
 
-By default, test resources remain in the cluster after completion to allow for log inspection and debugging. This guide explains the cleanup behavior for each platform and how to configure automatic cleanup.
+By default, test resources remain in the cluster after completion to allow for log inspection and debugging. This guide explains the cleanup behavior and how to configure automatic cleanup.
 
 ---
 
-## Cleanup Behavior by Platform
+## Cleanup Behavior
 
-### 🐳 Docker (Bare Metal)
+### ☸️ Kubernetes
 
-**Default Behavior**: Containers stop but remain unless `--rm` flag is used.
-
-**Current Examples**: ✅ All examples use `--rm` flag for automatic cleanup
-
-```bash
-# Automatic cleanup (recommended - already in all examples)
-docker run --gpus all --rm \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest
-```
-
-**Manual Cleanup** (if you omit `--rm`):
-```bash
-# List stopped containers
-docker ps -a --filter "ancestor=ghcr.io/ahmabboud/gpu_cluster_testing"
-
-# Remove specific container
-docker rm <container-id>
-
-# Remove all stopped containers
-docker container prune
-```
-
----
-
-### ☸️ Kubernetes (PyTorchJob)
-
-**Default Behavior**: ⚠️ Pods and PyTorchJob remain after completion
-
-**Current Examples**: Jobs remain for log inspection
+**Default Behavior**: ⚠️ Pods and Jobs remain after completion for log inspection.
 
 #### Automatic Cleanup Options
 
 **Option 1: TTL Controller (Recommended)**
 
-Add TTL to your PyTorchJob:
+Add TTL to your Job or PyTorchJob:
 
 ```yaml
 apiVersion: kubeflow.org/v1
@@ -127,23 +99,16 @@ echo "Cleanup complete"
 
 **Keep resources** for debugging:
 - Kubernetes: Don't set TTL, manually delete after inspection
-- Docker: Omit `--rm` flag if you need to inspect container
 
 ### For CI/CD Pipelines
 
 **Automatic cleanup** to prevent resource accumulation:
 
-**Kubernetes**:
 ```yaml
 spec:
   ttlSecondsAfterFinished: 600  # Delete after 10 minutes
   runPolicy:
     cleanPodPolicy: Running  # Delete running pods, keep failed for debugging
-```
-
-**Docker** (already configured):
-```bash
-docker run --rm ...  # Auto-cleanup on exit
 ```
 
 ### For Production Acceptance Testing
@@ -226,10 +191,9 @@ spec:
 ### ✅ DO
 
 1. **Set TTL for Kubernetes jobs** in production (24-48 hours)
-2. **Use `--rm` for Docker** in examples and CI/CD
-3. **Keep failed jobs longer** than successful ones for debugging
-4. **Monitor disk usage** in results directories
-5. **Document cleanup policy** in your runbooks
+2. **Keep failed jobs longer** than successful ones for debugging
+3. **Monitor disk usage** in results directories
+4. **Document cleanup policy** in your runbooks
 
 ### ❌ DON'T
 
@@ -295,34 +259,20 @@ kubectl get pods -l app=gpu-acceptance-test -o json | \
 ```
 
 **Docker**:
-```bash
-# List containers with disk usage
-docker ps -a --format "table {{.Names}}\t{{.Size}}\t{{.Status}}"
-
-# Total size of test images
-docker images --filter=reference='*gpu_cluster_testing*' --format "{{.Size}}"
-```
-
 ---
 
 ## Summary
 
 ### Current State
 
-| Platform | Auto-Cleanup? | Recommendation |
-|----------|---------------|----------------|
-| Docker | ✅ Yes (`--rm` in all examples) | No changes needed |
-| Kubernetes | ❌ No | Add TTL for production |
+Kubernetes jobs/pods remain after completion. Add TTL for automatic cleanup.
 
 ### Action Items
 
-1. **Kubernetes users**: Add `ttlSecondsAfterFinished` to PyTorchJob specs
-2. **All users**: Monitor disk usage in results directories
+1. **Add `ttlSecondsAfterFinished`** to Job specs for production
+2. **Monitor disk usage** in results directories
 3. **CI/CD**: Ensure automatic cleanup is configured
 
-### Files Updated
+### Reference Files
 
 - [examples/kubernetes-with-auto-cleanup.yaml](../examples/kubernetes-with-auto-cleanup.yaml) - Example with automatic cleanup
-- [scripts/cleanup-k8s-tests.sh](../scripts/cleanup-k8s-tests.sh) - Automated K8s cleanup
-
-See the examples directory for reference implementations.
