@@ -174,21 +174,25 @@ print_system_info() {
 health_check() {
     echo "Running pre-flight health check..."
     
-    # Check if Python is available
-    if ! command -v python3 &> /dev/null; then
-        echo "ERROR: Python3 not found"
+    # Determine Python command (python or python3)
+    if command -v python &> /dev/null; then
+        PYTHON_CMD=python
+    elif command -v python3 &> /dev/null; then
+        PYTHON_CMD=python3
+    else
+        echo "ERROR: Python not found"
         exit 1
     fi
     
     # Check if required Python packages are available
-    python3 -c "import torch" 2>/dev/null || {
+    $PYTHON_CMD -c "import torch" 2>/dev/null || {
         echo "ERROR: PyTorch not found"
         exit 1
     }
     
     # Check CUDA availability if GPUs are present
     if [ "$BACKEND" = "nccl" ]; then
-        python3 -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'" || {
+        $PYTHON_CMD -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'" || {
             echo "ERROR: CUDA is not available"
             exit 1
         }
@@ -221,10 +225,10 @@ main() {
     
     # Execute the training script with all passed arguments
     echo "Starting training script..."
-    echo "Command: python3 train.py $@"
+    echo "Command: $PYTHON_CMD train.py $@"
     echo ""
     
-    exec python3 train.py "$@"
+    exec $PYTHON_CMD train.py "$@"
 }
 
 # Run main function
