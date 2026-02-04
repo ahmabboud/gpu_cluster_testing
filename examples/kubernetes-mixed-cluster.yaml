@@ -1,0 +1,238 @@
+# Example: GPU Acceptance Test on Mixed GPU/Non-GPU Kubernetes Cluster
+#
+# This example demonstrates best practices for running GPU workloads
+# on a Kubernetes cluster that contains both GPU and non-GPU nodes.
+#
+# Key Features:
+# 1. Resource requests ensure scheduling on GPU nodes
+# 2. NodeSelector provides explicit GPU node targeting (optional)
+# 3. Tolerations handle tainted GPU nodes (if applicable)
+# 4. Affinity rules ensure all pods land on GPU nodes
+#
+
+apiVersion: kubeflow.org/v1
+kind: PyTorchJob
+metadata:
+  name: gpu-cluster-acceptance-test
+  namespace: default
+spec:
+  pytorchReplicaSpecs:
+    Master:
+      replicas: 1
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: gpu-acceptance-test
+            role: master
+        spec:
+          # --- GPU Node Scheduling Configuration ---
+          
+          # 1. NodeSelector: Target nodes with specific labels
+          # Uncomment and adjust based on your cluster's node labels
+          nodeSelector:
+            # Common GPU node labels (adjust to match your cluster):
+            # accelerator: nvidia-gpu
+            # node.kubernetes.io/instance-type: "gpu-instance-type"
+            # cloud.google.com/gke-accelerator: nvidia-tesla-v100
+            # eks.amazonaws.com/nodegroup: gpu-nodes
+            kubernetes.io/hostname: gpu-node-1  # Or use wildcard labels
+          
+          # 2. Affinity: Prefer or require GPU nodes
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: Exists
+          
+          # 3. Tolerations: If GPU nodes are tainted to prevent non-GPU workloads
+          tolerations:
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: PreferNoSchedule
+          
+          containers:
+          - name: pytorch
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+            imagePullPolicy: Always
+            
+            args:
+              - "--model"
+              - "resnet50"
+              - "--batch-size"
+              - "64"
+              - "--active-iterations"
+              - "100"
+              - "--warmup-iterations"
+              - "50"
+            
+            # --- Resource Configuration ---
+            resources:
+              limits:
+                nvidia.com/gpu: 8  # Request 8 GPUs - ensures GPU node scheduling
+                memory: "64Gi"
+                cpu: "32"
+              requests:
+                nvidia.com/gpu: 8  # Must match limits for guaranteed QoS
+                memory: "64Gi"
+                cpu: "32"
+            
+            # --- Environment Variables ---
+            env:
+            # NCCL debugging (recommended for acceptance testing)
+            - name: NCCL_DEBUG
+              value: "INFO"
+            - name: NCCL_DEBUG_SUBSYS
+              value: "ALL"
+            
+            # --- Network Configuration ---
+            # Choose ONE of the following configurations based on your setup:
+            
+            # Option 1: InfiniBand/RDMA (high-performance multi-node)
+            # Uncomment these if you have InfiniBand adapters
+            # - name: NCCL_IB_DISABLE
+            #   value: "0"
+            # - name: NCCL_IB_HCA
+            #   value: "mlx5_0,mlx5_1"  # Adjust based on your IB adapters
+            # - name: NCCL_IB_GID_INDEX
+            #   value: "3"
+            # - name: NCCL_IB_TC
+            #   value: "136"
+            # - name: NCCL_IB_TIMEOUT
+            #   value: "23"
+            
+            # Option 2: Ethernet (standard multi-node)
+            # Uncomment and adjust for your primary network interface
+            - name: NCCL_SOCKET_IFNAME
+              value: "eth0"  # Common: eth0, ens3, ens5, or use "^eth,^ens" for pattern
+            # Disable InfiniBand if not available
+            # - name: NCCL_IB_DISABLE
+            #   value: "1"
+            
+            # Option 3: RoCE (RDMA over Converged Ethernet)
+            # - name: NCCL_NET_GDR_LEVEL
+            #   value: "PHB"
+            # - name: NCCL_P2P_NET_CHUNKSIZE
+            #   value: "131072"
+            
+            # Optional: Advanced NCCL tuning
+            # - name: NCCL_MIN_NCHANNELS
+            #   value: "4"
+            # - name: NCCL_P2P_DISABLE
+            #   value: "0"
+            # - name: NCCL_ALGO
+            #   value: "Ring"  # Or "Tree" depending on topology
+            
+            # --- Volume Mounts (optional) ---
+            # volumeMounts:
+            # - name: shared-data
+            #   mountPath: /workspace/data
+          
+          # volumes:
+          # - name: shared-data
+          #   persistentVolumeClaim:
+          #     claimName: gpu-test-data-pvc
+    
+    Worker:
+      replicas: 3
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: gpu-acceptance-test
+            role: worker
+        spec:
+          # --- Same scheduling configuration as Master ---
+          nodeSelector:
+            kubernetes.io/hostname: gpu-node-*  # Pattern match for GPU nodes
+          
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: Exists
+            # Optional: Spread workers across different nodes for better testing
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchExpressions:
+                    - key: role
+                      operator: In
+                      values:
+                      - worker
+                  topologyKey: kubernetes.io/hostname
+          
+          tolerations:
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: PreferNoSchedule
+          
+          containers:
+          - name: pytorch
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+            imagePullPolicy: Always
+            
+            args:
+              - "--model"
+              - "resnet50"
+              - "--batch-size"
+              - "64"
+              - "--active-iterations"
+              - "100"
+              - "--warmup-iterations"
+              - "50"
+            
+            resources:
+              limits:
+                nvidia.com/gpu: 8
+                memory: "64Gi"
+                cpu: "32"
+              requests:
+                nvidia.com/gpu: 8
+                memory: "64Gi"
+                cpu: "32"
+            
+            env:
+            - name: NCCL_DEBUG
+              value: "INFO"
+            - name: NCCL_DEBUG_SUBSYS
+              value: "ALL"
+
+---
+# Verification Commands:
+#
+# 1. Check GPU nodes in cluster:
+#    kubectl get nodes -o json | jq '.items[] | select(.status.capacity."nvidia.com/gpu" != null) | {name: .metadata.name, gpus: .status.capacity."nvidia.com/gpu"}'
+#
+# 2. Verify NVIDIA device plugin:
+#    kubectl get daemonset -n kube-system | grep nvidia
+#
+# 3. Check node labels:
+#    kubectl get nodes --show-labels | grep gpu
+#
+# 4. Apply this configuration:
+#    kubectl apply -f kubernetes-mixed-cluster.yaml
+#
+# 5. Monitor pod scheduling:
+#    kubectl get pods -l app=gpu-acceptance-test -o wide
+#
+# 6. View logs from master:
+#    kubectl logs -f pytorch-job-master-0
+#
+# 7. Check which nodes pods landed on:
+#    kubectl get pods -l app=gpu-acceptance-test -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,STATUS:.status.phase
+#
+# 8. If pods are pending, check events:
+#    kubectl describe pytorchjob gpu-cluster-acceptance-test

@@ -1,0 +1,179 @@
+apiVersion: "kubeflow.org/v2beta1"
+kind: PyTorchJob
+metadata:
+  name: gpu-cluster-test-flexible
+  namespace: default
+spec:
+  elasticPolicy: null
+  
+  pytorchReplicaSpec:
+    Master:
+      replicas: 1
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: gpu-cluster-test
+            role: master
+        spec:
+          # Optional: Init container for ulimit (recommended for production)
+          initContainers:
+          - name: init-ulimit
+            image: busybox:1.27.2
+            command: ['sh', '-c', 'ulimit -Hn unlimited && ulimit -Sn unlimited && ulimit -Hl unlimited && ulimit -Sl unlimited']
+            securityContext:
+              privileged: true
+          
+          containers:
+          - name: pytorch
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+            imagePullPolicy: Always
+            
+            # Resource configuration - FLEXIBLE
+            # Adjust these based on your cluster:
+            # - For single-GPU testing: nvidia.com/gpu: 1, cpu: 4-8, memory: 16-32Gi
+            # - For multi-GPU nodes: nvidia.com/gpu: <num_gpus>, cpu: 14*<num_gpus>, memory: 150*<num_gpus>Gi
+            # - For Nebius H100: nvidia.com/gpu: 8, cpu: 112, memory: 1200Gi
+            resources:
+              requests:
+                nvidia.com/gpu: "1"  # CHANGE THIS based on your needs
+                cpu: "4"
+                memory: 16Gi
+              limits:
+                nvidia.com/gpu: "1"  # CHANGE THIS based on your needs
+                cpu: "8"
+                memory: 32Gi
+            
+            # Shared memory mount - RECOMMENDED for multi-worker DataLoaders
+            volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            
+            env:
+            # Model configuration - matching Nebius KubeRay pattern
+            - name: MODEL
+              value: "resnet18"  # Smaller, faster (11M params vs ResNet50's 25M)
+            - name: BATCH_SIZE
+              value: "128"  # Matches KubeRay test
+            - name: NUM_ITERATIONS
+              value: "100"
+            - name: DATA_MODE
+              value: "fashion_mnist"  # Small dataset (30MB), proven in Nebius production
+            
+            # NCCL configuration
+            - name: NCCL_DEBUG
+              value: "WARN"  # Change to "INFO" for debugging
+            - name: NCCL_SOCKET_IFNAME
+              value: "eth0"  # Adjust based on your network interface
+            
+            command:
+            - "python"
+            - "/workspace/src/train.py"
+            args:
+            - "--model"
+            - "resnet18"
+            - "--batch-size"
+            - "128"
+            - "--num-iterations"
+            - "100"
+            - "--data-mode"
+            - "fashion_mnist"
+            - "--save-results"
+          
+          volumes:
+          - name: dshm
+            emptyDir:
+              medium: Memory
+              sizeLimit: 4Gi  # Adjust based on needs
+    
+    Worker:
+      replicas: 1  # CHANGE THIS: Number of worker nodes
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: gpu-cluster-test
+            role: worker
+        spec:
+          automountServiceAccountToken: false
+          
+          initContainers:
+          - name: init-ulimit
+            image: busybox:1.27.2
+            command: ['sh', '-c', 'ulimit -Hn unlimited && ulimit -Sn unlimited && ulimit -Hl unlimited && ulimit -Sl unlimited']
+            securityContext:
+              privileged: true
+          
+          containers:
+          - name: pytorch
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+            imagePullPolicy: Always
+            
+            # MATCH MASTER RESOURCES
+            resources:
+              requests:
+                nvidia.com/gpu: "1"  # CHANGE THIS to match master
+                cpu: "4"
+                memory: 16Gi
+              limits:
+                nvidia.com/gpu: "1"  # CHANGE THIS to match master
+                cpu: "8"
+                memory: 32Gi
+            
+            volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            
+            env:
+            - name: NCCL_DEBUG
+              value: "WARN"
+            - name: NCCL_SOCKET_IFNAME
+              value: "eth0"
+            
+            command:
+            - "python"
+            - "/workspace/src/train.py"
+            args:
+            - "--model"
+            - "resnet18"
+            - "--batch-size"
+            - "128"
+            - "--num-iterations"
+            - "100"
+            - "--data-mode"
+            - "fashion_mnist"
+          
+          volumes:
+          - name: dshm
+            emptyDir:
+              medium: Memory
+              sizeLimit: 4Gi
+
+  runPolicy:
+    cleanPodPolicy: Running
+    ttlSecondsAfterFinished: 86400  # Delete after 24 hours
+
+---
+# Configuration Examples:
+#
+# 1. Single GPU per worker (any cluster):
+#    nvidia.com/gpu: "1"
+#    cpu: "4"
+#    memory: 16Gi
+#
+# 2. 4-GPU node (smaller clusters):
+#    nvidia.com/gpu: "4"
+#    cpu: "56"         # 14 per GPU
+#    memory: 600Gi     # 150GB per GPU
+#
+# 3. 8-GPU H100 node (Nebius production):
+#    nvidia.com/gpu: "8"
+#    cpu: "112"        # 14 per GPU
+#    memory: 1200Gi    # 150GB per GPU
+#
+# Matching Nebius KubeRay Pattern:
+# - Model: resnet18 (11M params, faster than resnet50)
+# - Dataset: fashion_mnist (30MB, proven to work)
+# - Batch size: 128 (matches KubeRay test)
+# - Shared memory: Mounted to prevent DataLoader crashes
+# - ulimit: Configured for high file descriptor usage

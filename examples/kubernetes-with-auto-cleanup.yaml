@@ -1,0 +1,228 @@
+# Example: GPU Acceptance Test with Automatic Cleanup
+#
+# This example demonstrates GPU testing with automatic resource cleanup
+# to prevent accumulation of completed jobs and pods.
+#
+# Key Features:
+# 1. TTL controller automatically deletes job after completion
+# 2. Clean pod policy manages pod lifecycle
+# 3. Resource requests ensure scheduling on GPU nodes
+# 4. Suitable for CI/CD pipelines and production environments
+#
+
+apiVersion: kubeflow.org/v1
+kind: PyTorchJob
+metadata:
+  name: gpu-cluster-acceptance-test-with-ttl
+  namespace: default
+  labels:
+    app: gpu-acceptance-test
+    cleanup: auto
+spec:
+  # --- Automatic Cleanup Configuration ---
+  
+  # TTL (Time To Live): Automatically delete job after completion
+  # Set to desired retention period in seconds:
+  #   - 600 = 10 minutes (CI/CD)
+  #   - 3600 = 1 hour (development)
+  #   - 86400 = 24 hours (production)
+  ttlSecondsAfterFinished: 3600
+  
+  # Run Policy: Controls pod cleanup behavior
+  runPolicy:
+    # cleanPodPolicy options:
+    #   - "All": Delete all pods when job completes
+    #   - "Running": Delete only running pods, keep completed/failed for debugging
+    #   - "None": Keep all pods (requires manual cleanup)
+    cleanPodPolicy: Running
+    
+    # Optional: Backoff limit for failures
+    backoffLimit: 3
+    
+    # Optional: Active deadline (max runtime in seconds)
+    # activeDeadlineSeconds: 3600  # Kill job after 1 hour
+  
+  # --- PyTorch Job Specification ---
+  
+  pytorchReplicaSpecs:
+    Master:
+      replicas: 1
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: gpu-acceptance-test
+            role: master
+        spec:
+          # GPU Node Scheduling
+          nodeSelector:
+            nvidia.com/gpu.present: "true"
+          
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: Exists
+          
+          tolerations:
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+          
+          containers:
+          - name: pytorch
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+            command: ["python3", "/workspace/src/train.py"]
+            args:
+              - "--model"
+              - "resnet50"
+              - "--batch-size"
+              - "64"
+              - "--active-iterations"
+              - "100"
+              - "--data-mode"
+              - "synthetic"
+            
+            resources:
+              requests:
+                nvidia.com/gpu: 8
+                cpu: "32"
+                memory: "128Gi"
+              limits:
+                nvidia.com/gpu: 8
+                memory: "256Gi"
+            
+            env:
+            - name: NCCL_DEBUG
+              value: "INFO"
+            - name: NCCL_IB_DISABLE
+              value: "0"
+            
+            volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+          
+          volumes:
+          - name: shm
+            emptyDir:
+              medium: Memory
+              sizeLimit: "32Gi"
+    
+    Worker:
+      replicas: 3
+      restartPolicy: OnFailure
+      template:
+        metadata:
+          labels:
+            app: gpu-acceptance-test
+            role: worker
+        spec:
+          nodeSelector:
+            nvidia.com/gpu.present: "true"
+          
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - key: nvidia.com/gpu
+                    operator: Exists
+            # Anti-affinity: Spread workers across different nodes
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                      - gpu-acceptance-test
+                  topologyKey: kubernetes.io/hostname
+          
+          tolerations:
+          - key: nvidia.com/gpu
+            operator: Exists
+            effect: NoSchedule
+          
+          containers:
+          - name: pytorch
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+            command: ["python3", "/workspace/src/train.py"]
+            args:
+              - "--model"
+              - "resnet50"
+              - "--batch-size"
+              - "64"
+              - "--active-iterations"
+              - "100"
+              - "--data-mode"
+              - "synthetic"
+            
+            resources:
+              requests:
+                nvidia.com/gpu: 8
+                cpu: "32"
+                memory: "128Gi"
+              limits:
+                nvidia.com/gpu: 8
+                memory: "256Gi"
+            
+            env:
+            - name: NCCL_DEBUG
+              value: "INFO"
+            - name: NCCL_IB_DISABLE
+              value: "0"
+            
+            volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+          
+          volumes:
+          - name: shm
+            emptyDir:
+              medium: Memory
+              sizeLimit: "32Gi"
+
+---
+# Optional: CronJob for additional cleanup (belt and suspenders approach)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cleanup-gpu-tests
+  namespace: default
+spec:
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: default  # Update with appropriate SA
+          restartPolicy: OnFailure
+          containers:
+          - name: cleanup
+            image: bitnami/kubectl:latest
+            command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "Starting GPU test cleanup..."
+              
+              # Delete completed PyTorchJobs older than 24 hours
+              kubectl get pytorchjobs -o json | \
+                jq -r '.items[] | 
+                  select(.status.completionTime != null) | 
+                  select((now - (.status.completionTime | fromdateiso8601)) > 86400) | 
+                  .metadata.name' | \
+                xargs -r kubectl delete pytorchjob --ignore-not-found
+              
+              # Delete completed pods
+              kubectl delete pods --field-selector=status.phase=Succeeded \
+                -l app=gpu-acceptance-test --ignore-not-found
+              
+              echo "Cleanup complete!"
