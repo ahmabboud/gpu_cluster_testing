@@ -1,5 +1,7 @@
 # GPU Cluster Acceptance Testing Tool
 
+[![CI](https://github.com/ahmabboud/gpu_cluster_testing/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmabboud/gpu_cluster_testing/actions/workflows/ci.yml)
+
 **Zero-Dependency Distributed Training for Infrastructure Validation**
 
 A portable, scale-agnostic tool for validating GPU cluster health, performance, and interconnect stability. Run acceptance tests on GPU clusters regardless of size or orchestration layer.
@@ -179,6 +181,12 @@ Single-node multi-GPU (torchrun standalone):
 kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
 kubectl logs -f pod/gpu-cluster-test-multi-gpu-single-node
 kubectl delete pod gpu-cluster-test-multi-gpu-single-node --ignore-not-found=true
+```
+
+**Expected output (2 GPUs):**
+```
+✅ NCCL initialized: nranks=2
+✅ Training completed: ~9,000-15,000 samples/sec (scales ~linearly with GPU count)
 ```
 
 Multi-node DDP without an operator (StatefulSet + headless service):
