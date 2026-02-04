@@ -8,6 +8,21 @@ A portable, scale-agnostic tool for validating GPU cluster health, performance, 
 
 **Production-Ready** | **Open Source** | **Battle-Tested**
 
+## Test Types
+
+This tool provides **three types of tests** for comprehensive GPU cluster validation:
+
+| Test Type | What It Validates | Duration | Command |
+|-----------|-------------------|----------|---------|
+| **🔥 Smoke Test (Training)** | GPU compute, memory, DDP | 5-10 min | `kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml` |
+| **📡 NCCL Bandwidth Test** | NVLink/InfiniBand throughput | 2-5 min | See [NCCL Testing Guide](docs/NCCL_TESTING.md) |
+| **🔌 InfiniBand Verification** | RDMA connectivity, IB status | 1 min | See [InfiniBand Guide](docs/INFINIBAND_CONFIGURATION.md) |
+
+**Recommended workflow:**
+1. **InfiniBand check** → Verify hardware connectivity
+2. **NCCL test** → Validate network bandwidth
+3. **Training smoke test** → Confirm end-to-end ML workload
+
 ## Features
 
 - **🚀 Zero Dependencies (Default)**: Uses synthetic data generation - no external datasets required
