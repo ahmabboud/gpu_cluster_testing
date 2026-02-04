@@ -491,22 +491,59 @@ Before running production workloads:
 
 ## Quick Start Examples
 
-### Nebius Production Config
-```yaml
-# Copy from: examples/kubernetes-multi-gpu-nebius-optimized.yaml
+### Verify InfiniBand Status (from a pod)
+
+```bash
+# Deploy a quick test pod
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ib-check
+spec:
+  restartPolicy: Never
+  containers:
+  - name: check
+    image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+    command: ["/bin/bash", "-c"]
+    args:
+      - |
+        echo "=== InfiniBand Status ==="
+        ibstat 2>/dev/null || echo "ibstat not available"
+        echo ""
+        echo "=== RDMA Devices ==="
+        ibv_devices 2>/dev/null || echo "ibv_devices not available"
+        echo ""
+        echo "=== GPU Topology ==="
+        nvidia-smi topo -m
+        echo ""
+        echo "=== Network Interfaces ==="
+        ip -br addr
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+EOF
+
+kubectl logs -f pod/ib-check
+kubectl delete pod ib-check
+```
+
+### Nebius Production Config (H100 with InfiniBand)
+```bash
 # Pre-configured for H100 with InfiniBand
+kubectl apply -f examples/kubernetes-multi-gpu-nebius-optimized.yaml
 ```
 
-### Generic InfiniBand
-```yaml
-# Copy from: examples/kubernetes-infiniband.yaml
-# Template for custom InfiniBand clusters
+### Multi-Node DDP (works on any cluster)
+```bash
+# StatefulSet + headless service for multi-node
+kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
 ```
 
-### Standard Ethernet
-```yaml
-# Copy from: examples/kubernetes-pytorch-multi-node.yaml
-# No InfiniBand, works on any Kubernetes
+### Single-Node Multi-GPU Test
+```bash
+# Simple pod for testing without InfiniBand
+kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
 ```
 
 ---
