@@ -37,12 +37,9 @@ RUN pip install --no-cache-dir \
     gpustat \
     torchvision
 
-# Build NCCL tests for direct bandwidth/latency measurements
-# This allows running focused NCCL tests alongside full training tests
-RUN git clone https://github.com/NVIDIA/nccl-tests.git /workspace/nccl-tests && \
-    cd /workspace/nccl-tests && \
-    make MPI=1 MPI_HOME=/usr/lib/x86_64-linux-gnu/openmpi CUDA_HOME=/usr/local/cuda && \
-    echo "NCCL tests built successfully at /workspace/nccl-tests/build/"
+# Note: NCCL tests can be built on-demand in the cluster if needed
+# Skipped here to save space during CI/CD build
+# To build manually: git clone https://github.com/NVIDIA/nccl-tests.git && make MPI=1
 
 # Create data directory for optional real datasets
 RUN mkdir -p /workspace/data
