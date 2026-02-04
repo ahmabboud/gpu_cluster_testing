@@ -51,12 +51,7 @@ This tool provides **three types of tests** for comprehensive GPU cluster valida
 
 ## Prerequisites
 
-### For Docker/Bare Metal
-- NVIDIA GPU with CUDA support
-- Docker with NVIDIA Container Toolkit
-- Verify GPU access: `docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi`
-
-### For Kubernetes Clusters
+### Kubernetes Clusters
 - **kubectl access** with permissions to create pods/jobs
 - **NVIDIA GPU Operator** or device plugin installed
 - **GPU nodes labeled** (verify with `kubectl get nodes -L nvidia.com/gpu.product`)
@@ -149,23 +144,6 @@ kubectl logs -f pod/gpu-cluster-test-ddp-0
 
 # Cleanup
 kubectl delete statefulset gpu-cluster-test-ddp service/gpu-cluster-test-ddp --ignore-not-found=true
-```
-
-## Quick Start (Docker - requires local GPU)
-
-For machines with direct GPU access:
-
-```bash
-# Pull container
-docker pull ghcr.io/ahmabboud/gpu_cluster_testing:latest
-
-# Single GPU test
-docker run --gpus all --rm ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet18 --batch-size 128
-
-# Multi-GPU test (8 GPUs)
-docker run --gpus all --rm --ipc=host ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c "torchrun --nproc_per_node=8 /workspace/src/train.py --model resnet50 --batch-size 32"
 ```
 
 ## Additional Deployment Examples
@@ -267,29 +245,6 @@ kubectl label nodes <node-name> accelerator=nvidia-gpu
 
 **Advanced Example**: For production deployments on mixed clusters with node affinity, tolerations, and anti-affinity rules, see [examples/kubernetes-mixed-cluster.yaml](examples/kubernetes-mixed-cluster.yaml).
 
-### Docker (Local Testing)
-
-On a machine with NVIDIA GPUs:
-
-```bash
-export MASTER_ADDR=<master-node-ip>
-export MASTER_PORT=29500
-export WORLD_SIZE=16  # Total number of GPUs
-export NCCL_SOCKET_IFNAME=eth0  # Adjust to your network interface
-
-# Single GPU test
-docker run --gpus all --rm \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet50 --batch-size 32
-
-# Multi-GPU test (single node, 2 GPUs)
-docker run --gpus '"device=0,1"' --rm \
-  -e WORLD_SIZE=2 \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  torchrun --standalone --nproc_per_node=2 \
-  src/train.py --model resnet18 --batch-size 32 --active-iterations 50
-```
-
 ## Command-Line Options
 
 | Option | Default | Description |
@@ -305,32 +260,24 @@ docker run --gpus '"device=0,1"' --rm \
 
 ### Data Modes
 
-**Synthetic (Default, Recommended for Acceptance Testing):**
-```bash
-docker run --gpus all --rm ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet50 --data-mode synthetic
-```
+Data modes can be configured via command-line arguments in your Kubernetes manifests:
 
-**CIFAR-10 (Lightweight, 170MB, Auto-download):**
-```bash
-docker run --gpus all --rm -v $(pwd)/data:/workspace/data \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet50 --data-mode cifar10 --num-classes 10
-```
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| `synthetic` (default) | Generated data, no downloads | ✅ Recommended for acceptance testing |
+| `cifar10` | 170MB, auto-download | Lightweight real data validation |
+| `cifar100` | 170MB, auto-download | Lightweight real data validation |
+| `imagenet` | Requires pre-mounted dataset | Production-scale testing |
 
-**CIFAR-100 (Lightweight, 170MB, Auto-download):**
-```bash
-docker run --gpus all --rm -v $(pwd)/data:/workspace/data \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet50 --data-mode cifar100 --num-classes 100
-```
-
-**ImageNet Subset (Requires pre-downloaded dataset):**
-```bash
-# First, download ImageNet validation set to ./data/imagenet/
-docker run --gpus all --rm -v $(pwd)/data:/workspace/data \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet50 --data-mode imagenet --num-classes 1000
+**Example**: To use CIFAR-10, modify your pod spec args:
+```yaml
+args:
+  - "--model"
+  - "resnet50"
+  - "--data-mode"
+  - "cifar10"
+  - "--num-classes"
+  - "10"
 ```
 
 > **Note:** For acceptance testing, **synthetic mode is recommended** as it eliminates dataset download time and storage requirements, providing consistent, reproducible results focused purely on GPU/network performance.
@@ -399,47 +346,22 @@ The tool outputs a `results.json` file with the following structure:
 
 ## NCCL Bandwidth Testing
 
-**NEW**: The container now includes official NVIDIA NCCL test binaries for direct bandwidth/latency measurements.
+For direct NCCL bandwidth/latency measurements, see the **[NCCL Testing Guide](docs/NCCL_TESTING.md)**.
 
-**See [NCCL Testing Guide](docs/NCCL_TESTING.md) for complete documentation.**
-
-### Quick NCCL Test (Single Node, 8 GPUs)
-
-Test NVLink bandwidth:
-```bash
-docker run --gpus all --rm --ipc=host \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c "cd /workspace/nccl-tests && mpirun --allow-run-as-root -np 8 ./build/all_reduce_perf -b 8K -e 8G -f 2 -g 1"
-```
-
-Expected result: **400-450 GB/s** for H100 with NVLink
-
-### Test InfiniBand (Force IB Usage)
+### Quick NCCL Test (Kubernetes)
 
 ```bash
-docker run --gpus all --rm --ipc=host --network=host \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c "
-    export NCCL_P2P_DISABLE=1
-    export NCCL_SHM_DISABLE=1
-    export NCCL_ALGO=Ring
-    export NCCL_DEBUG=INFO
-    cd /workspace/nccl-tests
-    mpirun --allow-run-as-root -np 8 ./build/all_reduce_perf -b 8K -e 8G -f 2 -g 1
-  "
-```
-
-Expected result: **200-240 GB/s** for HDR InfiniBand
-
-### Multi-Node NCCL Test (Kubernetes)
-
-Use the StatefulSet example for multi-node DDP testing:
-```bash
+# Deploy multi-node DDP test (includes NCCL communication)
 kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
 kubectl logs -f pod/gpu-cluster-test-ddp-0
+
+# Cleanup
+kubectl delete statefulset gpu-cluster-test-ddp service/gpu-cluster-test-ddp --ignore-not-found=true
 ```
 
-This tests NCCL communication across multiple nodes via InfiniBand.
+**Expected bandwidth:**
+- **NVLink (intra-node)**: 400-450 GB/s on H100
+- **InfiniBand (inter-node)**: 200-240 GB/s on HDR
 
 **When to use NCCL tests vs Full Training:**
 - **NCCL tests** (2-5 min): Quick infrastructure validation, network debugging
@@ -473,22 +395,22 @@ git clone https://github.com/YOUR_USERNAME/gpu_cluster_testing.git
 cd gpu_cluster_testing
 
 # Build container (for AMD64 GPU servers)
-docker build --platform linux/amd64 -t gpu-cluster-testing:local .
+docker build --platform linux/amd64 -t ghcr.io/YOUR_USERNAME/gpu_cluster_testing:latest .
 
-# Run local build
-docker run --gpus all --rm gpu-cluster-testing:local
+# Push to your registry
+docker push ghcr.io/YOUR_USERNAME/gpu_cluster_testing:latest
+
+# Update Kubernetes manifests to use your image
+sed -i 's|ghcr.io/ahmabboud/|ghcr.io/YOUR_USERNAME/|g' examples/*.yaml
 ```
 
 ## Resource Cleanup
 
 ⚠️ **Important**: By default, test resources remain in the cluster after completion for log inspection.
 
-### Cleanup Behavior by Platform
+### Cleanup Behavior
 
-| Platform | Behavior | Recommendation |
-|----------|----------|----------------|
-| **Docker** | ✅ Auto-cleanup (all examples use `--rm`) | No action needed |
-| **Kubernetes** | ❌ Jobs/pods remain after completion | Configure TTL or manual cleanup |
+Kubernetes jobs/pods remain after completion for log inspection. Use TTL or manual cleanup.
 
 ### Quick Cleanup Commands
 

@@ -99,11 +99,11 @@ def generate_synthetic_batch(batch_size, num_channels, height, width,
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Step 1: Start Container                                    │
+│ Step 1: Deploy Pod to Kubernetes                           │
 │                                                             │
-│ $ docker run --gpus all --rm \                             │
-│     cr.eu-north1.../gpu_cluster_testing:latest \           │
-│     --model resnet50 --batch-size 64                       │
+│ $ kubectl apply -f examples/kubernetes-pod-multi-gpu.yaml  │
+│   → Pod scheduled on GPU node                              │
+│   → Container starts with GPU access                       │
 └──────────────────┬──────────────────────────────────────────┘
                    │
                    ▼
@@ -112,8 +112,8 @@ def generate_synthetic_batch(batch_size, num_channels, height, width,
 │                                                             │
 │ ┌─────────────────────────────────────────────────────┐   │
 │ │ Detect Environment:                                 │   │
-│ │ - Kubernetes? Check KUBERNETES_SERVICE_HOST         │   │
-│ │ - Docker/Manual? Use environment variables          │   │
+│ │ - Kubernetes? Check KUBERNETES_SERVICE_HOST ✓       │   │
+│ │ - Manual mode? Use environment variables            │   │
 │ └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │ ┌─────────────────────────────────────────────────────┐   │

@@ -22,10 +22,11 @@ export LD_LIBRARY_PATH="/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib:${LD_LIBRARY_PATH}"
 If you're building custom images based on this tool, ensure this is set **before** any Python imports.
 
 #### Manual Workaround (if needed)
-```bash
-docker run --gpus all --rm \
-  -e LD_LIBRARY_PATH="/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib:${LD_LIBRARY_PATH}" \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest
+Add environment variable to your pod spec:
+```yaml
+env:
+- name: LD_LIBRARY_PATH
+  value: "/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib"
 ```
 
 ---
@@ -43,21 +44,24 @@ Incorrect network interface detection or firewall blocking NCCL ports.
 
 #### Solution
 
-**For InfiniBand clusters:**
-```bash
-docker run --gpus all --rm --network=host \
-  -e NCCL_IB_DISABLE=0 \
-  -e NCCL_IB_HCA=mlx5_0 \
-  -e NCCL_DEBUG=INFO \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest
+**For InfiniBand clusters**, add to pod spec:
+```yaml
+env:
+- name: NCCL_IB_DISABLE
+  value: "0"
+- name: NCCL_IB_HCA
+  value: "mlx5_0"
+- name: NCCL_DEBUG
+  value: "INFO"
 ```
 
-**For Ethernet clusters:**
-```bash
-docker run --gpus all --rm --network=host \
-  -e NCCL_SOCKET_IFNAME=eth0 \
-  -e NCCL_DEBUG=INFO \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest
+**For Ethernet clusters**, add to pod spec:
+```yaml
+env:
+- name: NCCL_SOCKET_IFNAME
+  value: "eth0"
+- name: NCCL_DEBUG
+  value: "INFO"
 ```
 
 **Debug network interface detection:**
@@ -76,17 +80,18 @@ RuntimeError: CUDA out of memory
 ```
 
 #### Solution
-Reduce batch size:
-```bash
-docker run --gpus all --rm \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --batch-size 64  # Reduce from default 128
+Reduce batch size in your pod spec args:
+```yaml
+args:
+  - "--batch-size"
+  - "64"  # Reduce from default
 ```
 
 Or use a smaller model:
-```bash
-# ResNet18 (11M params) instead of ResNet50 (25M params)
---model resnet18
+```yaml
+args:
+  - "--model"
+  - "resnet18"  # 11M params instead of ResNet50's 25M params
 ```
 
 ---
@@ -102,13 +107,7 @@ ERROR: Unexpected bus error encountered in worker
 Insufficient shared memory for DataLoader workers with real datasets.
 
 #### Solution
-**Docker:**
-```bash
-docker run --gpus all --rm --ipc=host \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest
-```
-
-**Kubernetes:**
+Add shared memory volume to your pod spec (already included in provided examples):
 ```yaml
 volumes:
 - name: dshm
@@ -153,20 +152,17 @@ no matching manifest for linux/arm64/v8
 ```
 
 #### Cause
-Trying to pull AMD64 image on ARM64 system (e.g., Apple Silicon Mac).
+Trying to pull AMD64 image on ARM64 system (e.g., Apple Silicon Mac) or misconfigured Kubernetes node.
 
 #### Solution
-**For local testing on ARM Mac:**
+The container image is built for AMD64 GPU servers. Ensure your Kubernetes GPU nodes are AMD64 architecture.
+
+**When building for your registry:**
 ```bash
-docker pull --platform linux/amd64 ghcr.io/ahmabboud/gpu_cluster_testing:latest
+docker build --platform linux/amd64 -t your-registry/gpu_cluster_testing:latest .
 ```
 
-**For building locally:**
-```bash
-docker build --platform linux/amd64 -t gpu_cluster_testing:local .
-```
-
-Note: The image is built for AMD64 GPU servers. ARM64 is not supported as NVIDIA GPUs require AMD64.
+Note: ARM64 is not supported as NVIDIA data center GPUs require AMD64.
 
 ---
 
