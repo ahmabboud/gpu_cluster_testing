@@ -188,7 +188,7 @@ health_check() {
     echo "DEBUG: In health_check, PYTHON_CMD='$PYTHON_CMD'"
     
     # Check if required Python packages are available
-    $PYTHON_CMD -c "import torch" 2>/dev/null || {
+    $PYTHON_CMD -c "import torch" || {
         echo "ERROR: PyTorch not found"
         echo "DEBUG: Tried to run: $PYTHON_CMD -c 'import torch'"
         exit 1
