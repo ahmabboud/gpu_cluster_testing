@@ -609,7 +609,8 @@ kubectl apply -f examples/kubernetes-with-auto-cleanup.yaml
        effect: NoSchedule
      ```
 
-For detailed troubleshooting, see the [Acceptance Playbook](docs/ACCEPTANCE_PLAYBOOK.md).
+For detailed troubleshooting, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) (common failures) and
+[docs/INFINIBAND_CONFIGURATION.md](docs/INFINIBAND_CONFIGURATION.md) (NCCL/InfiniBand tuning).
 
 ## Architecture
 
@@ -618,12 +619,16 @@ gpu_cluster_testing/
 ├── src/
 │   ├── models/
 │   │   ├── __init__.py
+│   │   ├── resnet18.py       # ResNet-18 implementation
 │   │   ├── resnet.py          # ResNet-50 implementation
 │   │   └── transformer.py     # Transformer implementation
 │   ├── data_utils.py           # Synthetic data generation
+│   ├── dataset_loaders.py       # Optional real dataset loaders
 │   └── train.py                # Main training script
 ├── scripts/
 │   └── entrypoint.sh           # Universal environment detection
+│   └── verify-k8s-gpu-cluster.sh # Optional cluster verification helper
+├── examples/                    # Kubernetes/Slurm examples
 ├── Dockerfile                  # Container definition
 └── .github/
     └── workflows/
@@ -662,16 +667,16 @@ Fixed 8-GPU configuration for high-performance clusters.
 
 ### Standard (Any Kubernetes Cluster)
 ```bash
-kubectl apply -f examples/kubernetes-pytorch-multi-node.yaml
+kubectl apply -f examples/kubernetes-mixed-cluster.yaml
 ```
-Simple 1-GPU per worker configuration.
+Works on clusters with dedicated GPU nodes (and optional taints/labels).
 
 See `examples/` directory for:
 - **kubernetes-flexible-nebius-pattern.yaml** - Configurable GPU count (ResNet18 + FashionMNIST)
 - **kubernetes-multi-gpu-nebius-optimized.yaml** - Fixed 8-GPU H100 configuration
-- **kubernetes-pytorch-multi-node.yaml** - Standard Kubernetes (any cluster)
+- **kubernetes-mixed-cluster.yaml** - Mixed GPU/non-GPU clusters (selectors, tolerations)
 - **kubernetes-with-auto-cleanup.yaml** - Automated cleanup configuration
-- **slurm-acceptance-test.sh** - Slurm job script
+- **slurm-nccl-test.sh** - Slurm NCCL bandwidth test script
 
 ## License
 
