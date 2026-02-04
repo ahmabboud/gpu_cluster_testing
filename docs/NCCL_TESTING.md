@@ -41,7 +41,41 @@ Both are valuable and serve different purposes.
 
 ## NCCL Testing on Kubernetes
 
-### Quick Single-Node Test
+### Quick Single-Node Test (8 GPUs)
+
+Deploy a pod that runs the NCCL all_reduce benchmark:
+
+```bash
+# Create the test pod
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-bandwidth-test
+spec:
+  restartPolicy: Never
+  containers:
+  - name: nccl-test
+    image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+    command: ["/bin/bash", "-c"]
+    args:
+      - |
+        cd /workspace/nccl-tests
+        mpirun --allow-run-as-root -np 8 --bind-to none \
+          ./build/all_reduce_perf -b 8K -e 8G -f 2 -g 1
+    resources:
+      limits:
+        nvidia.com/gpu: 8
+EOF
+
+# Watch the logs
+kubectl logs -f pod/nccl-bandwidth-test
+
+# Cleanup when done
+kubectl delete pod nccl-bandwidth-test
+```
+
+### Expected Results
 
 **H100 PCIe with NVLink:**
 ```
@@ -62,38 +96,12 @@ Size      Count    Type   Time    AlgBw   BusBw
 8         10000    float  48.21   0.00    0.00    <-- Target: <50 μs
 ```
 
-### Using Our Container on Kubernetes
-
-Our container includes NCCL tests in `/workspace/nccl-tests/`.
-
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: nccl-bandwidth-test
-spec:
-  restartPolicy: Never
-  containers:
-  - name: nccl-test
-    image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
-    command: ["/bin/bash", "-c"]
-    args:
-      - |
-        cd /workspace/nccl-tests
-        mpirun --allow-run-as-root -np 8 --bind-to none \
-          ./build/all_reduce_perf -b 8K -e 8G -f 2 -g 1
-    resources:
-      limits:
-        nvidia.com/gpu: 8
-  nodeSelector:
-    nvidia.com/gpu.product: NVIDIA-H100-PCIe
-```
-
 ## Testing Specific Network Modes
 
 ### Test NVLink Only (Single Node)
 
-```yaml
+```bash
+cat <<'EOF' | kubectl apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -112,13 +120,20 @@ spec:
     resources:
       limits:
         nvidia.com/gpu: 8
+EOF
+
+kubectl logs -f pod/nccl-nvlink-test
+kubectl delete pod nccl-nvlink-test
 ```
 
 **Expected**: 400-450 GB/s for H100 with NVLink
 
 ### Test InfiniBand Only (Force IB)
 
-```yaml
+This disables P2P and shared memory to force all traffic over InfiniBand:
+
+```bash
+cat <<'EOF' | kubectl apply -f -
 apiVersion: v1
 kind: Pod
 metadata:
@@ -131,7 +146,6 @@ spec:
     command: ["/bin/bash", "-c"]
     args:
       - |
-        # Disable P2P and SHM to force InfiniBand usage
         export NCCL_P2P_DISABLE=1
         export NCCL_SHM_DISABLE=1
         export NCCL_ALGO=Ring
@@ -142,6 +156,10 @@ spec:
     resources:
       limits:
         nvidia.com/gpu: 8
+EOF
+
+kubectl logs -f pod/nccl-infiniband-test
+kubectl delete pod nccl-infiniband-test
 ```
 
 **Expected**: 200-240 GB/s for HDR InfiniBand (200 Gbps per port)
