@@ -411,16 +411,16 @@ def run_training(
         print(f"Samples Processed: {total_samples * world_size:,}")
         print("=" * 80)
         
-        # Save results to JSON
+        # Save results to JSON (convert numpy types to native Python)
         results = {
             "model": args.model,
             "world_size": world_size,
             "batch_size_per_gpu": args.batch_size,
             "global_batch_size": args.batch_size * world_size,
-            "total_time_seconds": total_time,
-            "average_step_time_seconds": global_avg_step_time,
-            "throughput_samples_per_second": global_throughput,
-            "total_samples": total_samples * world_size,
+            "total_time_seconds": float(total_time),
+            "average_step_time_seconds": float(global_avg_step_time),
+            "throughput_samples_per_second": float(global_throughput),
+            "total_samples": int(total_samples * world_size),
             "device": str(device),
             "backend": os.environ.get("BACKEND", "auto-detected")
         }
