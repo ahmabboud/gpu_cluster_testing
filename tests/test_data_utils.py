@@ -8,20 +8,23 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from data_utils import (
-    create_synthetic_image_batch,
-    create_synthetic_text_batch,
-    create_synthetic_dataloader
+    generate_synthetic_batch,
+    generate_synthetic_sequence_batch,
+    SyntheticDataLoader,
 )
 
 
 class TestSyntheticImageData:
     def test_generate_image_data_rgb(self):
         """Test RGB image generation"""
-        images, labels = create_synthetic_image_batch(
-            batch_size=100, 
-            image_size=(224, 224), 
+        device = torch.device("cpu")
+        images, labels = generate_synthetic_batch(
+            batch_size=100,
+            num_channels=3,
+            height=224,
+            width=224,
             num_classes=1000,
-            channels=3
+            device=device,
         )
         assert images.shape == (100, 3, 224, 224)
         assert labels.shape == (100,)
@@ -29,11 +32,14 @@ class TestSyntheticImageData:
         
     def test_generate_image_data_grayscale(self):
         """Test grayscale image generation"""
-        images, labels = create_synthetic_image_batch(
-            batch_size=100, 
-            image_size=(28, 28), 
+        device = torch.device("cpu")
+        images, labels = generate_synthetic_batch(
+            batch_size=100,
+            num_channels=1,
+            height=28,
+            width=28,
             num_classes=10,
-            channels=1
+            device=device,
         )
         assert images.shape == (100, 1, 28, 28)
         assert labels.shape == (100,)
@@ -43,38 +49,41 @@ class TestSyntheticImageData:
 class TestSyntheticTextData:
     def test_generate_text_data(self):
         """Test text sequence generation"""
-        sequences, labels = create_synthetic_text_batch(
+        device = torch.device("cpu")
+        sequences, labels = generate_synthetic_sequence_batch(
             batch_size=100,
             seq_length=128,
             vocab_size=10000,
-            num_classes=10
+            device=device,
         )
         assert sequences.shape == (100, 128)
-        assert labels.shape == (100,)
+        assert labels.shape == (100, 128)
         assert sequences.max() < 10000
-        assert labels.max() < 10
+        assert labels.max() < 10000
 
 
 class TestSyntheticDataLoader:
     def test_dataloader_creation(self):
         """Test synthetic dataloader creation"""
-        dataloader = create_synthetic_dataloader(
-            num_samples=100,
+        dataloader = SyntheticDataLoader(
+            num_batches=4,
             batch_size=32,
-            image_size=(224, 224),
+            data_shape=(3, 224, 224),
             num_classes=1000,
-            data_type='image'
+            device=torch.device("cpu"),
+            data_type="image",
         )
         assert dataloader is not None
         
     def test_dataloader_iteration(self):
         """Test iterating through dataloader"""
-        dataloader = create_synthetic_dataloader(
-            num_samples=100,
+        dataloader = SyntheticDataLoader(
+            num_batches=4,
             batch_size=32,
-            image_size=(224, 224),
+            data_shape=(3, 224, 224),
             num_classes=1000,
-            data_type='image'
+            device=torch.device("cpu"),
+            data_type="image",
         )
         images, labels = next(iter(dataloader))
         assert images.shape[0] <= 32  # batch size

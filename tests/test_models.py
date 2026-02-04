@@ -48,17 +48,33 @@ class TestResNet50:
 class TestTransformer:
     def test_transformer_creation(self):
         """Test Transformer model can be created"""
-        model = TransformerModel(vocab_size=10000, d_model=512, nhead=8, 
-                          num_layers=6, dim_feedforward=2048)
+        model = TransformerModel(
+            vocab_size=10000,
+            d_model=512,
+            nhead=8,
+            num_encoder_layers=6,
+            num_decoder_layers=6,
+            dim_feedforward=2048,
+            max_seq_length=64,
+        )
         assert model is not None
         
     def test_transformer_forward(self):
         """Test Transformer forward pass"""
-        model = TransformerModel(vocab_size=10000, d_model=512, nhead=8, 
-                          num_layers=6, dim_feedforward=2048)
-        batch = torch.randint(0, 10000, (2, 32))
-        output = model(batch)
-        assert output.shape == (2, 32, 10000)
+        model = TransformerModel(
+            vocab_size=10000,
+            d_model=512,
+            nhead=8,
+            num_encoder_layers=6,
+            num_decoder_layers=6,
+            dim_feedforward=2048,
+            max_seq_length=64,
+        )
+        # TransformerModel expects [seq_len, batch_size]
+        src = torch.randint(0, 10000, (32, 2))
+        tgt = torch.randint(0, 10000, (32, 2))
+        output = model(src, tgt)
+        assert output.shape == (32, 2, 10000)
 
 
 if __name__ == "__main__":
