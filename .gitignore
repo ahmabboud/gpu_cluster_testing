@@ -31,6 +31,17 @@ results.json
 smoke-test.yaml
 dynamic-gpu-test.yaml
 test-*.yaml
+debug-pod.yaml
+final-test.yaml
+
+# Ignore keys and certificates
+*.pem
+*.key
+*.crt
+
+# Ignore downloaded external repositories
+nebius-solutions-library-*/
+soperator-*/
 test-*.sh
 
 # Ignore Docker artifacts

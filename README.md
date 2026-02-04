@@ -2,18 +2,18 @@
 
 **Zero-Dependency Distributed Training for Infrastructure Validation**
 
-A portable, scale-agnostic tool for validating GPU cluster health, performance, and interconnect stability. Built for Nebius Infrastructure Engineers to run acceptance tests on new clusters regardless of size or orchestration layer.
+A portable, scale-agnostic tool for validating GPU cluster health, performance, and interconnect stability. Run acceptance tests on GPU clusters regardless of size or orchestration layer.
 
-**Internal Nebius Solution Library** | **Production-Ready** | **Nebius-Optimized**
+**Production-Ready** | **Open Source** | **Battle-Tested**
 
 ## Features
 
 - **🚀 Zero Dependencies (Default)**: Uses synthetic data generation - no external datasets required
-- **📦 Real Dataset Support**: Optional FashionMNIST (Nebius-proven), CIFAR-10, CIFAR-100, or ImageNet subset
+- **📦 Real Dataset Support**: Optional FashionMNIST, CIFAR-10, CIFAR-100, or ImageNet subset
 - **🎯 Multiple Models**:
-  - **ResNet18** - 11M parameters, matches Nebius KubeRay production pattern (faster validation)
-  - **ResNet50** - 25M parameters, comprehensive testing
-  - **Transformer** - Configurable size, bandwidth testing
+  - **ResNet18** - 11M parameters (faster validation)
+  - **ResNet50** - 25M parameters (comprehensive testing)
+  - **Transformer** - Configurable size (bandwidth testing)
 - **📊 Comprehensive Testing**: Tests GPU compute, memory, and NCCL communication
 - **🔧 Universal Compatibility**: Works on Kubernetes, Slurm, and bare metal
 - **📈 Performance Profiling**: Detailed metrics including throughput, step time, and NCCL overhead
@@ -25,12 +25,44 @@ A portable, scale-agnostic tool for validating GPU cluster health, performance, 
   - Configurable GPU count (1-8+ GPUs per worker)
   - Automatic resource scaling recommendations
   - No hardcoded assumptions
-- **🏭 Production Patterns**: Based on proven Nebius production deployments
-  - ResNet18 + FashionMNIST (matches KubeRay test)
+- **🏭 Production Patterns**: Battle-tested configurations
+  - ResNet18 + FashionMNIST (lightweight validation)
   - Multi-GPU worker support
   - Shared memory configuration for DataLoader workers
   - Init containers for ulimit configuration
   - InfiniBand/RDMA optimization
+
+## Prerequisites
+
+### For Docker/Bare Metal
+- NVIDIA GPU with CUDA support
+- Docker with NVIDIA Container Toolkit
+- Verify GPU access: `docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi`
+
+### For Kubernetes Clusters
+- **kubectl access** with permissions to create pods/jobs
+- **NVIDIA GPU Operator** or device plugin installed
+- **GPU nodes labeled** (verify with `kubectl get nodes -L nvidia.com/gpu.product`)
+- **Optional**: PyTorch Operator for PyTorchJob CRD (`kubectl get crd pytorchjobs.kubeflow.org`)
+
+#### Quick Cluster Verification
+
+```bash
+# 1. Check GPU nodes exist
+kubectl get nodes -L nvidia.com/gpu.product
+
+# 2. Verify GPU resource allocation
+kubectl describe nodes | grep -A 5 "Allocated resources"
+
+# 3. Test GPU access with simple pod
+kubectl run gpu-test --image=nvidia/cuda:12.0-base --restart=Never --rm -it \
+  --limits='nvidia.com/gpu=1' -- nvidia-smi
+```
+
+### For Slurm
+- Slurm with GPU support
+- Singularity or similar container runtime
+- Access to GPU partitions
 
 ## Quick Start
 
@@ -54,10 +86,10 @@ docker run --gpus all --rm \
   --data-mode fashion_mnist
 ```
 
-### Quick Test (Matching Nebius KubeRay Pattern)
+### Quick Test (ResNet18 + FashionMNIST)
 
 ```bash
-# ResNet18 + FashionMNIST - proven in production
+# Lightweight validation with real dataset
 docker run --gpus all --rm --ipc=host \
   ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   --model resnet18 \
@@ -70,7 +102,7 @@ docker run --gpus all --rm --ipc=host \
 ```bash
 # Using torchrun (recommended)
 docker run --gpus all --rm --ipc=host \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   bash -c "cd /workspace/src && torchrun --nproc_per_node=8 train.py --model resnet50 --batch-size 32"
 ```
 
@@ -84,7 +116,7 @@ docker run --gpus all --rm --ipc=host --network=host \
   -e NCCL_IB_DISABLE=0 \
   -e NCCL_IB_HCA=mlx5_0 \
   -e NCCL_DEBUG=INFO \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   --model resnet50 --batch-size 64
 ```
 
@@ -93,11 +125,32 @@ docker run --gpus all --rm --ipc=host --network=host \
 docker run --gpus all --rm --ipc=host --network=host \
   -e NCCL_SOCKET_IFNAME=eth0 \
   -e NCCL_DEBUG=INFO \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   --model resnet50 --batch-size 64
 ```
 
 ## Deployment Examples
+
+### Kubernetes - Simple Single-GPU Test
+
+**Start here** - Verify cluster before multi-node testing:
+
+```bash
+kubectl run gpu-test \
+  --image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
+  --restart=Never --rm -it \
+  --limits='nvidia.com/gpu=1' \
+  -- --model resnet18 --batch-size 128 --active-iterations 20
+```
+
+**Expected output:**
+```
+✅ GPU detected: NVIDIA H100 80GB HBM3
+✅ NCCL initialized successfully
+✅ Training completed: 1,795 samples/sec
+```
+
+If successful, proceed to multi-GPU or multi-node tests below.
 
 ### Kubernetes (with PyTorch Operator)
 
@@ -119,7 +172,7 @@ spec:
         spec:
           containers:
           - name: pytorch
-            image: cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
             args:
               - "--model"
               - "resnet50"
@@ -147,7 +200,7 @@ spec:
         spec:
           containers:
           - name: pytorch
-            image: cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
             args:
               - "--model"
               - "resnet50"
@@ -211,7 +264,7 @@ Create a Slurm batch script `acceptance_test.sh`:
 module load singularity
 
 # Convert Docker image to Singularity (if needed)
-# singularity pull docker://cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest
+# singularity pull docker://ghcr.io/ahmabboud/gpu_cluster_testing:latest
 
 # Run with Slurm
 srun singularity exec --nv \
@@ -246,7 +299,7 @@ for i in {0..7}; do
     -e RANK=$i \
     -e WORLD_SIZE=$WORLD_SIZE \
     -e LOCAL_RANK=$i \
-    cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+    ghcr.io/ahmabboud/gpu_cluster_testing:latest \
     --model resnet50 --batch-size 32 &
 done
 ```
@@ -267,7 +320,7 @@ for i in {0..7}; do
     -e RANK=$((i+8)) \
     -e WORLD_SIZE=$WORLD_SIZE \
     -e LOCAL_RANK=$i \
-    cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+    ghcr.io/ahmabboud/gpu_cluster_testing:latest \
     --model resnet50 --batch-size 32 &
 done
 ```
@@ -289,21 +342,21 @@ done
 
 **Synthetic (Default, Recommended for Acceptance Testing):**
 ```bash
-docker run --gpus all --rm cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+docker run --gpus all --rm ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   --model resnet50 --data-mode synthetic
 ```
 
 **CIFAR-10 (Lightweight, 170MB, Auto-download):**
 ```bash
 docker run --gpus all --rm -v $(pwd)/data:/workspace/data \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   --model resnet50 --data-mode cifar10 --num-classes 10
 ```
 
 **CIFAR-100 (Lightweight, 170MB, Auto-download):**
 ```bash
 docker run --gpus all --rm -v $(pwd)/data:/workspace/data \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   --model resnet50 --data-mode cifar100 --num-classes 100
 ```
 
@@ -311,7 +364,7 @@ docker run --gpus all --rm -v $(pwd)/data:/workspace/data \
 ```bash
 # First, download ImageNet validation set to ./data/imagenet/
 docker run --gpus all --rm -v $(pwd)/data:/workspace/data \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   --model resnet50 --data-mode imagenet --num-classes 1000
 ```
 
@@ -342,17 +395,42 @@ The tool outputs a `results.json` file with the following structure:
 - **Average Step Time**: Time per training step including gradient synchronization
 - **Global Batch Size**: Total batch size across all GPUs
 
-## Expected Performance (Baseline)
+### Success Criteria
 
-See the [Acceptance Playbook](docs/ACCEPTANCE_PLAYBOOK.md) for detailed H100 benchmarks and troubleshooting guidance.
+✅ **Test Passed** if:
+- No NCCL errors or timeouts
+- Throughput > 0 samples/sec
+- All GPUs detected and utilized
+- Training completes without OOM errors
+
+⚠️ **Investigate** if:
+- Throughput significantly below baseline (see docs/HOW_IT_WORKS.md)
+- NCCL initialization failures (see docs/TROUBLESHOOTING.md)
+- OOM errors (reduce batch size or use smaller model)
+
+## Troubleshooting
+
+**Common issues:**
+
+1. **UCX/UCC ImportError** - Fixed in container, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md#ucxucc-library-conflict)
+2. **NCCL timeout** - Check network connectivity and InfiniBand config
+3. **Pod stuck in Pending** - Verify GPU nodes and resource requests
+4. **OOM errors** - Reduce `--batch-size` or use `resnet18` instead
+
+**Full troubleshooting guide**: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+
+## Expected Performance (Baseline)
 
 ### Quick Reference (H100 80GB, NVLink)
 
 | Configuration | Model | Batch/GPU | Expected Throughput |
 |---------------|-------|-----------|---------------------|
+| 1x H100 | ResNet-18 | 128 | ~1,800 samples/sec |
 | 8x H100 | ResNet-50 | 64 | ~14,000 samples/sec |
 | 32x H100 | ResNet-50 | 64 | ~50,000 samples/sec |
 | 8x H100 | Transformer | 32 | ~8,000 samples/sec |
+
+**Note**: Actual performance varies by GPU model, interconnect (NVLink vs InfiniBand vs Ethernet), and NCCL configuration. See [docs/HOW_IT_WORKS.md](docs/HOW_IT_WORKS.md) for detailed benchmarks.
 
 ## NCCL Bandwidth Testing
 
@@ -365,7 +443,7 @@ See the [Acceptance Playbook](docs/ACCEPTANCE_PLAYBOOK.md) for detailed H100 ben
 Test NVLink bandwidth:
 ```bash
 docker run --gpus all --rm --ipc=host \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   bash -c "cd /workspace/nccl-tests && mpirun --allow-run-as-root -np 8 ./build/all_reduce_perf -b 8K -e 8G -f 2 -g 1"
 ```
 
@@ -375,7 +453,7 @@ Expected result: **400-450 GB/s** for H100 with NVLink
 
 ```bash
 docker run --gpus all --rm --ipc=host --network=host \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   bash -c "
     export NCCL_P2P_DISABLE=1
     export NCCL_SHM_DISABLE=1
@@ -558,39 +636,29 @@ Contributions are welcome! Please see the [Implementation Plan](docs/Exercise%20
 
 ## Documentation
 
-### Getting Started
-- **[How It Works](docs/HOW_IT_WORKS.md)** - Complete explanation of architecture, data flow, and testing methodology
-- **[Nebius Registry Guide](docs/NEBIUS_REGISTRY_GUIDE.md)** - How to push/pull images to Nebius Container Registry
+### Core Guides
+- **[How It Works](docs/HOW_IT_WORKS.md)** - Architecture, data flow, and testing methodology
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions (UCX/UCC, NCCL, OOM, etc.)
+- **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Codebase structure and organization
 
-### Configuration Guides
+### Advanced Topics
 - **[InfiniBand Configuration](docs/INFINIBAND_CONFIGURATION.md)** - NCCL setup for InfiniBand/RoCE clusters
-- **[Learnings from Nebius](docs/LEARNINGS_FROM_NEBIUS.md)** - Best practices from production deployments
-
-### Testing & Performance
-- **[NCCL Testing Guide](docs/NCCL_TESTING.md)** - Direct NCCL bandwidth/latency testing
-- **[Acceptance Playbook](docs/ACCEPTANCE_PLAYBOOK.md)** - Benchmarks and troubleshooting guide
-
-### Operations
+- **[NCCL Testing](docs/NCCL_TESTING.md)** - Direct NCCL bandwidth/latency measurement
 - **[Cleanup Guide](docs/CLEANUP_GUIDE.md)** - Resource cleanup strategies for all platforms
-- **[Complete Summary](docs/COMPLETE_SUMMARY.md)** - Overview of all features and enhancements
-
-### Reference
-- **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Detailed codebase structure
-- **[Implementation Plan](docs/Exercise%202%20Implementation%20Plan.md)** - Development roadmap
 
 ## Examples
 
-### Quick Start (Nebius Pattern - ResNet18 + FashionMNIST)
+### Quick Start (ResNet18 + FashionMNIST)
 ```bash
 kubectl apply -f examples/kubernetes-flexible-nebius-pattern.yaml
 ```
-Matches Nebius KubeRay production test - configurable GPU count.
+Configurable GPU count for flexible testing.
 
-### Production (Multi-GPU, Nebius-Optimized)
+### Production (Multi-GPU H100 Cluster)
 ```bash
 kubectl apply -f examples/kubernetes-multi-gpu-nebius-optimized.yaml
 ```
-Fixed 8-GPU configuration for H100 clusters.
+Fixed 8-GPU configuration for high-performance clusters.
 
 ### Standard (Any Kubernetes Cluster)
 ```bash
@@ -599,7 +667,7 @@ kubectl apply -f examples/kubernetes-pytorch-multi-node.yaml
 Simple 1-GPU per worker configuration.
 
 See `examples/` directory for:
-- **kubernetes-flexible-nebius-pattern.yaml** - Configurable GPU count, matches KubeRay (ResNet18 + FashionMNIST)
+- **kubernetes-flexible-nebius-pattern.yaml** - Configurable GPU count (ResNet18 + FashionMNIST)
 - **kubernetes-multi-gpu-nebius-optimized.yaml** - Fixed 8-GPU H100 configuration
 - **kubernetes-pytorch-multi-node.yaml** - Standard Kubernetes (any cluster)
 - **kubernetes-with-auto-cleanup.yaml** - Automated cleanup configuration
@@ -612,5 +680,5 @@ MIT License - See LICENSE file for details
 ## Support
 
 For issues and questions:
-- **Nebius Infrastructure Team** (internal Slack or contact)
-- Documentation: [docs/ACCEPTANCE_PLAYBOOK.md](docs/ACCEPTANCE_PLAYBOOK.md)
+- **GitHub Issues**: Report bugs or request features
+- **Documentation**: See [docs/](docs/) directory for detailed guides

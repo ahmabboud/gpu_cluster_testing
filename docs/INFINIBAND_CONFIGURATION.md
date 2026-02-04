@@ -230,7 +230,7 @@ spec:
         spec:
           containers:
           - name: pytorch
-            image: cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest
+            image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
             resources:
               limits:
                 nvidia.com/gpu: 8

@@ -104,7 +104,7 @@ spec:
   restartPolicy: Never
   containers:
   - name: nccl-test
-    image: cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu-cluster-test:latest
+    image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
     command: ["/bin/bash", "-c"]
     args:
       - |
@@ -122,12 +122,12 @@ spec:
 
 ```bash
 # Single node test
-srun --nodes=1 --gpus-per-node=8 --container-image=cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu-cluster-test:latest \
+srun --nodes=1 --gpus-per-node=8 --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   bash -c 'cd /workspace/nccl-tests && mpirun --allow-run-as-root -np 8 ./build/all_reduce_perf -b 8K -e 8G -f 2 -g 1'
 
 # Multi-node test
 srun --nodes=2 --ntasks-per-node=8 --gpus-per-node=8 --mpi=pmix \
-  --container-image=cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu-cluster-test:latest \
+  --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   bash -c 'cd /workspace/nccl-tests && ./build/all_reduce_perf_mpi -b 8K -e 8G -f 2 -g 1'
 ```
 
@@ -138,7 +138,7 @@ srun --nodes=2 --ntasks-per-node=8 --gpus-per-node=8 --mpi=pmix \
 ```bash
 # Default behavior - uses NVLink between GPUs on same node
 srun --nodes=1 --gpus-per-node=8 \
-  --container-image=cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu-cluster-test:latest \
+  --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   bash -c 'cd /workspace/nccl-tests && mpirun --allow-run-as-root -np 8 ./build/all_reduce_perf -b 512M -e 8G -f 2 -g 1'
 ```
 
@@ -149,7 +149,7 @@ srun --nodes=1 --gpus-per-node=8 \
 ```bash
 # Disable P2P and SHM to force InfiniBand usage
 srun --nodes=1 --gpus-per-node=8 \
-  --container-image=cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu-cluster-test:latest \
+  --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   bash -c '
     export NCCL_P2P_DISABLE=1
     export NCCL_SHM_DISABLE=1
@@ -166,7 +166,7 @@ srun --nodes=1 --gpus-per-node=8 \
 
 ```bash
 srun --nodes=4 --ntasks-per-node=8 --gpus-per-node=8 --mpi=pmix \
-  --container-image=cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu-cluster-test:latest \
+  --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
   bash -c '
     export NCCL_IB_DISABLE=0
     export NCCL_DEBUG=INFO

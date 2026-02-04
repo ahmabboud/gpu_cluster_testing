@@ -16,7 +16,7 @@ env:
 
 jobs:
   validate-code:
-    name: Validate Python Code
+    name: Validate and Test Code
     runs-on: ubuntu-latest
     
     steps:
@@ -28,6 +28,12 @@ jobs:
         with:
           python-version: '3.10'
       
+      - name: Install dependencies
+        run: |
+          pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install pytest
+          echo "✅ Dependencies installed"
+      
       - name: Validate Python syntax
         run: |
           python -m py_compile src/*.py
@@ -38,6 +44,11 @@ jobs:
         run: |
           bash -n scripts/entrypoint.sh
           echo "✅ Entrypoint script syntax validation passed"
+      
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/ -v
+          echo "✅ Unit tests passed"
   
   build-and-push:
     name: Build and Push Docker Image

@@ -220,11 +220,11 @@ def run_training(
     # Create data loader
     if args.data_mode == "synthetic":
         # Synthetic data generation (default, zero dependencies)
-        if args.model == "resnet50":
-            data_shape = (3, 224, 224)  # ImageNet-like
+        if args.model in ["resnet50", "resnet18"]:
+            data_shape = (3, 224, 224)  # ImageNet-like for ResNet models
             data_type = "image"
         else:
-            data_shape = (512,)  # Sequence length
+            data_shape = (512,)  # Sequence length for Transformer
             data_type = "sequence"
         
         train_loader = SyntheticDataLoader(
@@ -249,7 +249,7 @@ def run_training(
                 print(f"Failed to load {args.data_mode} dataset, falling back to synthetic data")
                 sys.stdout.flush()
             # Fallback to synthetic
-            if args.model == "resnet50":
+            if args.model in ["resnet50", "resnet18"]:
                 data_shape = (3, 224, 224)
                 data_type = "image"
             else:

@@ -11,7 +11,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │              Container Image (12 GB)                        │
-│  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/...          │
+│  ghcr.io/ahmabboud/gpu_cluster_testing:latest             │
 │                                                             │
 │  Base: NVIDIA PyTorch 24.07                                │
 │  ├─ CUDA 12.5 + cuDNN                                      │
@@ -351,7 +351,7 @@ Node 0 (Master)           Node 1                Node 2                Node 3
 ### What's Inside
 
 ```
-cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest
+ghcr.io/ahmabboud/gpu_cluster_testing:latest
 │
 ├── Base: nvcr.io/nvidia/pytorch:24.07-py3
 │   ├── Ubuntu 22.04

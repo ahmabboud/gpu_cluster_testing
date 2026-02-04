@@ -6,386 +6,195 @@ Complete overview of the GPU Cluster Acceptance Testing Tool repository.
 
 ```
 gpu_cluster_testing/
-├── 📄 Dockerfile                          # Container build configuration
-├── 📘 README.md                           # Main project documentation
+├── 📄 Dockerfile                          # Container build (AMD64, PyTorch base)
+├── 📘 README.md                           # Main documentation (606 lines)
+├── 📄 LICENSE                             # MIT License
 │
-├── 📂 docs/                               # Documentation (8 files, ~2,100 lines)
-│   ├── 📗 README.md                       # Documentation index and navigation guide
-│   ├── 📊 COMPLETE_SUMMARY.md            # ⭐ Complete overview of all enhancements
-│   ├── 🔬 NCCL_TESTING.md                # Complete NCCL bandwidth testing guide
-│   ├── 🎯 TESTING_WORKFLOW.md            # Visual workflows and decision trees
-│   ├── 📚 ACCEPTANCE_PLAYBOOK.md         # Benchmarks and troubleshooting
-│   ├── 📝 Exercise 2 Summary.md          # Detailed Soperator analysis
-│   ├── 🚀 IMPROVEMENTS_FROM_SOPERATOR.md # Quick reference for improvements
-│   ├── 📋 Exercise 2 Implementation Plan.md # Original requirements
-│   └── 🐳 NEBIUS_REGISTRY_GUIDE.md       # Container registry guide
+├── 📂 .github/workflows/                  # CI/CD
+│   └── ci.yml                             # Build, test, push to ghcr.io
 │
-├── 📂 examples/                           # Example configurations
-│   ├── ⚡ slurm-nccl-test.sh            # NEW: Soperator-style NCCL test script
-│   └── ☸️  kubernetes-mixed-cluster.yaml # Production Kubernetes deployment
+├── 📂 docs/                               # Documentation (6 files)
+│   ├── 🎓 HOW_IT_WORKS.md                # Architecture and data flow (500 lines)
+│   ├── 🔧 TROUBLESHOOTING.md             # Common issues (UCX/UCC, NCCL, OOM)
+│   ├── 📁 PROJECT_STRUCTURE.md           # This file
+│   ├── 🌐 INFINIBAND_CONFIGURATION.md    # NCCL/IB setup (532 lines)
+│   ├── 📊 NCCL_TESTING.md                # Bandwidth testing (320 lines)
+│   └── 🧹 CLEANUP_GUIDE.md               # Resource cleanup (448 lines)
 │
-├── 📂 scripts/                            # Utility scripts
-│   ├── 🔧 entrypoint.sh                  # Universal environment detection
-│   └── ✅ verify-k8s-gpu-cluster.sh      # Kubernetes cluster verification
+├── 📂 examples/                           # Deployment examples
+│   ├── kubernetes-flexible-nebius-pattern.yaml
+│   ├── kubernetes-mixed-cluster.yaml
+│   ├── kubernetes-simple.yaml
+│   ├── kubernetes-two-nodes.yaml
+│   ├── pytorchjob-example.yaml
+│   ├── slurm-multi-node.sh
+│   └── slurm-single-node.sh
 │
-└── 📂 src/                                # Source code
-    ├── 🎓 train.py                       # Main distributed training script
-    ├── 🔢 data_utils.py                  # Synthetic data generation
-    ├── 📦 dataset_loaders.py             # Real dataset loaders
-    └── 📂 models/                         # Model implementations
-        ├── __init__.py
-        ├── 🏗️ resnet.py                   # ResNet-50 for latency testing
-        └── 🤖 transformer.py              # Transformer for bandwidth testing
+├── 📂 scripts/                            # Runtime scripts
+│   └── 🔧 entrypoint.sh                  # Universal environment detection (241 lines)
+│
+├── 📂 src/                                # Source code
+│   ├── 🎓 train.py                       # Main training orchestrator (506 lines)
+│   ├── 🔢 data_utils.py                  # Synthetic data generation (147 lines)
+│   ├── 📦 dataset_loaders.py             # Real datasets (CIFAR, FashionMNIST) (420 lines)
+│   └── 📂 models/                         # Model implementations
+│       ├── __init__.py                    # Model exports
+│       ├── resnet18.py                    # ResNet-18 (146 lines)
+│       ├── resnet.py                      # ResNet-50 (235 lines)
+│       └── transformer.py                 # Transformer LM (270 lines)
+│
+└── 📂 tests/                              # Unit tests
+    ├── test_models.py                     # Model architecture tests
+    ├── test_data_utils.py                 # Data generation tests
+    └── test_dataset_loaders.py            # Dataset loader tests
 ```
 
 ## File Inventory
 
-### 🔴 Core Files (Container & Entry Points)
+### 🔴 Core Infrastructure
 
-| File | Lines | Purpose | Status |
-|------|-------|---------|--------|
-| **Dockerfile** | 63 | Container build with PyTorch + NCCL tests | Enhanced ✨ |
-| **README.md** | 487 | Main documentation and quick start | Enhanced ✨ |
-| **scripts/entrypoint.sh** | 190 | Environment detection (K8s/Slurm/bare) | Complete ✅ |
+| File | Lines | Purpose |
+|------|-------|---------|
+| **Dockerfile** | 65 | AMD64 container with NVIDIA PyTorch 24.07, CUDA 12.5 |
+| **README.md** | 606 | Main documentation, quick start, usage examples |
+| **.github/workflows/ci.yml** | 116 | CI/CD: validate → test → build → push to ghcr.io |
+| **scripts/entrypoint.sh** | 241 | Auto-detects Kubernetes/Slurm/bare metal, sets up NCCL |
 
-### 🟢 Training Code (Full Training Tests)
+**Key Features**:
+- UCX/UCC library path fix (lines 15-19 in entrypoint.sh)
+- Python command auto-detection (python vs python3)
+- InfiniBand/RDMA detection and NCCL configuration
+- Dynamic GPU count detection
 
-| File | Lines | Purpose | Status |
-|------|-------|---------|--------|
-| **src/train.py** | 496 | Main distributed training orchestration | Complete ✅ |
-| **src/models/resnet.py** | 235 | ResNet-50 for latency testing | Complete ✅ |
-| **src/models/transformer.py** | 270 | Transformer for bandwidth testing | Complete ✅ |
-| **src/data_utils.py** | 147 | Synthetic data generation | Complete ✅ |
-| **src/dataset_loaders.py** | 329 | Real dataset loaders (CIFAR, ImageNet) | Complete ✅ |
+### 🟢 Training Code
 
-### 🔵 Testing Scripts (NCCL & Verification)
+| File | Lines | Purpose |
+|------|-------|---------|
+| **src/train.py** | 506 | DDP orchestrator, supports ResNet18/50 + Transformer |
+| **src/models/resnet18.py** | 146 | ResNet-18 (11M params) - Nebius production pattern |
+| **src/models/resnet.py** | 235 | ResNet-50 (25M params) - comprehensive testing |
+| **src/models/transformer.py** | 270 | Transformer LM - bandwidth testing |
+| **src/data_utils.py** | 147 | Synthetic data (torch.randn, zero dependencies) |
+| **src/dataset_loaders.py** | 420 | Real datasets with DistributedSampler |
 
-| File | Lines | Purpose | Status |
-|------|-------|---------|--------|
-| **examples/slurm-nccl-test.sh** | 140 | Soperator-style NCCL testing | NEW ✨ |
-| **scripts/verify-k8s-gpu-cluster.sh** | ~300 | K8s cluster verification | Complete ✅ |
+**Models**:
+- ResNet-18: 11.7M parameters, 44.6 MB
+- ResNet-50: 25.6M parameters, 97.5 MB  
+- Transformer: Configurable (1024 d_model, 16 heads, 12 layers)
 
-### 🟡 Deployment Examples
+**Data Modes**:
+- `synthetic` - Default, no I/O (torch.randn in VRAM)
+- `fashion_mnist` - 30MB, 28x28 grayscale (matches Nebius KubeRay)
+- `cifar10` / `cifar100` - 32x32 RGB
+- `imagenet` - 224x224 RGB subset
 
-| File | Lines | Purpose | Status |
-|------|-------|---------|--------|
-| **examples/kubernetes-mixed-cluster.yaml** | 203 | Production K8s deployment | Enhanced ✨ |
+### 📚 Documentation
 
-### 📚 Documentation (Complete Suite)
+| File | Lines | Focus | Audience |
+|------|-------|-------|----------|
+| **HOW_IT_WORKS.md** | 500 | Architecture, data flow, execution | Developers |
+| **TROUBLESHOOTING.md** | 218 | UCX/UCC, NCCL, OOM, platform issues | All users |
+| **INFINIBAND_CONFIGURATION.md** | 532 | NCCL/IB setup, multi-node | Infra engineers |
+| **NCCL_TESTING.md** | 320 | Bandwidth/latency testing | Infra engineers |
+| **CLEANUP_GUIDE.md** | 448 | Resource management | Ops teams |
+| **PROJECT_STRUCTURE.md** | ~200 | This file | All users |
 
-| File | Lines | Primary Audience | Time to Read |
-|------|-------|------------------|--------------|
-| **docs/README.md** | 280 | All users | 5 min |
-| **docs/COMPLETE_SUMMARY.md** | 410 | Everyone | 15 min |
-| **docs/NCCL_TESTING.md** | 394 | Infrastructure Engineers | 25 min |
-| **docs/TESTING_WORKFLOW.md** | 260 | Test Operators | 10 min |
-| **docs/ACCEPTANCE_PLAYBOOK.md** | 524 | Infrastructure Engineers | 30 min |
-| **docs/Exercise 2 Summary.md** | 510 | Developers, Architects | 30 min |
-| **docs/IMPROVEMENTS_FROM_SOPERATOR.md** | 291 | Quick Reference | 8 min |
-| **docs/NEBIUS_REGISTRY_GUIDE.md** | 277 | DevOps, CI/CD | 15 min |
-| **docs/Exercise 2 Implementation Plan.md** | 72 | Project Management | 5 min |
+**Total Documentation**: ~2,400 lines across 6 files
 
-**Total Documentation**: ~3,018 lines across 9 files
+### 🧪 Tests
 
-## Statistics
+| Directory | Purpose |
+|-----------|---------|
+| **tests/** | Unit tests for models, data utils, dataset loaders |
 
-### Code Statistics
+Run with: `python -m pytest tests/ -v`
 
-| Category | Files | Lines | Purpose |
-|----------|-------|-------|---------|
-| **Training Code** | 5 | ~1,477 | Full ML training tests |
-| **Scripts** | 3 | ~633 | Entry points, verification |
-| **Examples** | 2 | ~343 | Deployment configurations |
-| **Documentation** | 9 | ~3,018 | Complete guides |
-| **Container** | 1 | 63 | Docker build |
-| **Main Docs** | 1 | 487 | README |
-| **TOTAL** | **21** | **~6,021** | Complete project |
+### 📦 Deployment Examples
 
-### New Content (From Soperator Enhancement)
+7 example files covering:
+- Kubernetes (PyTorchJob, plain Pods)
+- Slurm (single-node, multi-node)
+- Flexible GPU configuration (Nebius pattern)
 
-| Category | Files | Lines | Impact |
-|----------|-------|-------|--------|
-| **New Docs** | 5 | ~1,595 | Complete NCCL testing guide |
-| **Enhanced Docs** | 3 | +92 | Updated README, plan, playbook |
-| **New Scripts** | 1 | 140 | NCCL test automation |
-| **Enhanced Container** | 1 | +8 | NCCL test binaries |
-| **TOTAL NEW** | **10** | **~1,835** | Comprehensive enhancement |
+## Key Technologies
 
-## Features by File
+**Base Image**: `nvcr.io/nvidia/pytorch:24.07-py3`
+- CUDA: 12.5.1
+- Python: 3.10
+- PyTorch: 2.4.0
+- NCCL: 2.22.3
+- Platform: linux/amd64 (explicit for GPU servers)
 
-### Training Tests (Original)
+**Container Registry**: `ghcr.io/ahmabboud/gpu_cluster_testing:latest` (public)
 
-**Purpose**: Realistic ML workload validation
+**Dependencies**:
+- Zero runtime dependencies (synthetic data mode)
+- Optional: torchvision, datasets (for real data)
 
-**Files**:
-- `src/train.py` - Main training loop with DDP
-- `src/models/resnet.py` - Latency testing (small packets)
-- `src/models/transformer.py` - Bandwidth testing (large packets)
-- `src/data_utils.py` - Synthetic data generation
-- `src/dataset_loaders.py` - Real dataset support
+## CI/CD Pipeline
 
-**Runtime**: 10-30 minutes  
-**Use Case**: Acceptance testing, production readiness
+**Workflow** (.github/workflows/ci.yml):
+1. **Validate**: Python syntax + bash syntax
+2. **Test**: Run pytest unit tests (CPU)
+3. **Build**: Docker build for AMD64
+4. **Push**: ghcr.io on main branch only
+5. **Verify**: Pull and inspect pushed image
 
-### NCCL Tests (NEW - Soperator-Inspired)
+**Triggers**:
+- Push to main/develop
+- Pull requests to main
 
-**Purpose**: Direct network performance measurement
-
-**Files**:
-- `examples/slurm-nccl-test.sh` - Automated NCCL test suite
-- Built-in: `/workspace/nccl-tests/` - NVIDIA NCCL test binaries
-
-**Runtime**: 2-5 minutes  
-**Use Case**: Quick validation, network debugging
-
-### Infrastructure Tools
-
-**Purpose**: Environment detection and verification
-
-**Files**:
-- `scripts/entrypoint.sh` - Auto-detect K8s/Slurm/bare metal
-- `scripts/verify-k8s-gpu-cluster.sh` - Comprehensive K8s validation
-
-**Use Case**: Troubleshooting, cluster verification
-
-### Documentation
-
-**Purpose**: Complete user and developer guides
-
-**Files**:
-- 9 comprehensive Markdown documents
-- Covers all aspects: testing, deployment, troubleshooting
-
-**Audience**: Infrastructure engineers, developers, operators
-
-## Dependencies
-
-### Runtime Dependencies (in Container)
+## Code Statistics
 
 ```
-Base: nvcr.io/nvidia/pytorch:24.07-py3
-├── CUDA 12.5
-├── Python 3.10
-├── PyTorch 2.4.0
-├── torchvision
-├── psutil, gpustat
-└── NCCL test binaries (NEW)
-    ├── all_reduce_perf
-    ├── all_reduce_perf_mpi
-    └── Other NCCL tests
+Language     Files    Lines    Purpose
+─────────────────────────────────────────
+Python          7     1,733    Training code
+Bash            1       241    Entrypoint
+Markdown        6     2,409    Documentation
+YAML            7       ~600   Examples + CI
+Dockerfile      1        65    Container
+─────────────────────────────────────────
+Total                 5,048    lines
 ```
 
-### Build Dependencies
+## Recent Updates (Feb 2026)
 
-```
-System packages:
-├── git
-├── build-essential
-├── libopenmpi-dev
-├── openmpi-bin
-└── Network tools (iproute2, iputils-ping, etc.)
-```
+### Fixed
+- ✅ UCX/UCC library path conflicts
+- ✅ Python command detection (python vs python3)
+- ✅ ResNet18 synthetic data shape bug
+- ✅ Platform architecture (ARM64 → AMD64 cross-compile)
 
-### Optional Dependencies
+### Added
+- ✅ TROUBLESHOOTING.md with common issues
+- ✅ Unit tests in CI/CD
+- ✅ ResNet18 model (Nebius pattern)
+- ✅ InfiniBand auto-detection
 
-```
-Real Datasets (optional):
-├── CIFAR-10/100 (auto-download, 170MB)
-└── ImageNet subset (user-provided)
+### Removed
+- ✅ 11 outdated documentation files
+- ✅ Nebius registry references (migrated to ghcr.io)
+- ✅ CPU fallback (GPU required, fail fast)
 
-Orchestration (one required):
-├── Kubernetes with PyTorch Operator
-├── Slurm with container support
-└── Docker/Podman (bare metal)
-```
+## Usage Quick Reference
 
-## Execution Paths
-
-### Path 1: NCCL Quick Test (2-5 min)
-
-```
-User Command
-    ↓
-entrypoint.sh (environment detection)
-    ↓
-/workspace/nccl-tests/build/all_reduce_perf
-    ↓
-Raw bandwidth/latency results
-```
-
-### Path 2: Full Training Test (10-30 min)
-
-```
-User Command
-    ↓
-entrypoint.sh (environment detection)
-    ↓
-src/train.py (distributed setup)
-    ↓
-src/models/{resnet|transformer}.py
-    ↓
-Training loop with metrics
-```
-
-### Path 3: Cluster Verification
-
-```
-kubectl apply or sbatch
-    ↓
-scripts/verify-k8s-gpu-cluster.sh
-    ↓
-7-section validation report
-```
-
-## Configuration Files
-
-### Deployment Configurations
-
-| File | Format | Purpose |
-|------|--------|---------|
-| `examples/kubernetes-mixed-cluster.yaml` | YAML | Production K8s deployment |
-| `examples/slurm-nccl-test.sh` | Bash | Slurm NCCL test suite |
-
-### Container Configuration
-
-| File | Format | Purpose |
-|------|--------|---------|
-| `Dockerfile` | Docker | Container build specification |
-| `.github/workflows/ci.yml` | YAML | CI/CD pipeline (if present) |
-
-## Environment Variables
-
-### Supported by entrypoint.sh
-
+**Pull container**:
 ```bash
-# Detected from Slurm
-SLURM_PROCID, SLURM_NTASKS, SLURM_LOCALID, SLURM_NODELIST
-
-# Detected from Kubernetes
-RANK, WORLD_SIZE, LOCAL_RANK, MASTER_ADDR, MASTER_PORT
-
-# NCCL Configuration (user-configurable)
-NCCL_DEBUG, NCCL_DEBUG_SUBSYS
-NCCL_IB_DISABLE, NCCL_IB_HCA
-NCCL_SOCKET_IFNAME
-NCCL_P2P_DISABLE, NCCL_SHM_DISABLE, NCCL_ALGO
+docker pull ghcr.io/ahmabboud/gpu_cluster_testing:latest
 ```
 
-## Outputs
-
-### NCCL Test Output
-
-```
-results/nccl_bandwidth_<jobid>.out
-├── NVLink bandwidth (GB/s)
-├── InfiniBand bandwidth (GB/s)
-├── Multi-node performance
-└── Latency measurements (μs)
+**Run test**:
+```bash
+docker run --gpus all --rm --ipc=host \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
+  --model resnet18 --batch-size 128 --active-iterations 10
 ```
 
-### Training Test Output
-
-```
-Console output:
-├── Throughput (samples/sec)
-├── Step time breakdown
-├── NCCL sync overhead
-└── GPU utilization
-
-JSON metrics (optional):
-└── Detailed performance data
+**Check cluster health**:
+```bash
+kubectl run test --image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
+  --restart=Never --rm -it -- bash
 ```
 
-### Verification Output
-
-```
-Cluster verification report:
-├── GPU node status
-├── Device plugin check
-├── InfiniBand detection
-├── NCCL configuration
-└── Test pod validation
-```
-
-## Build Artifacts
-
-### Container Image
-
-```
-cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest
-├── Size: ~12 GB (PyTorch base + NCCL tests)
-├── Build time: ~3-4 minutes
-└── Architectures: linux/amd64
-```
-
-### NCCL Test Binaries (in Container)
-
-```
-/workspace/nccl-tests/build/
-├── all_reduce_perf         # Single-process all-reduce
-├── all_reduce_perf_mpi     # MPI-enabled all-reduce
-├── all_gather_perf         # All-gather operations
-├── broadcast_perf          # Broadcast operations
-├── reduce_perf             # Reduce operations
-└── reduce_scatter_perf     # Reduce-scatter operations
-```
-
-## Version Control
-
-### Git Structure (Recommended)
-
-```
-.git/
-├── main branch
-│   └── Production-ready code
-├── feature branches
-│   └── New enhancements
-└── .gitignore
-    ├── __pycache__/
-    ├── *.pyc
-    ├── data/
-    └── results/
-```
-
-## Access Points
-
-### Entry Points for Users
-
-1. **Docker CLI**: Direct container execution
-2. **Kubernetes**: PyTorchJob manifests
-3. **Slurm**: sbatch scripts
-4. **Documentation**: docs/README.md
-
-### Entry Points for Developers
-
-1. **Source Code**: src/ directory
-2. **Scripts**: scripts/ directory
-3. **Examples**: examples/ directory
-4. **Documentation**: All markdown files
-
-## Summary
-
-**Total Project Size**:
-- 21 files
-- ~6,021 lines of code and documentation
-- ~12 GB container image
-- 100% test coverage for core functionality
-
-**Key Components**:
-- ✅ Full training tests (ResNet-50, Transformer)
-- ✅ NCCL bandwidth tests (NEW)
-- ✅ Universal environment support (K8s, Slurm, bare)
-- ✅ Comprehensive documentation (9 files)
-- ✅ Automated verification scripts
-
-**Maintenance**:
-- Clear separation of concerns
-- Well-documented codebase
-- Comprehensive testing examples
-- Easy to extend and enhance
-
----
-
-**Last Updated**: [Current Date]  
-**Repository**: `/Users/ahb/gpu_cluster_testing`  
-**Maintainer**: Nebius Infrastructure Engineering
+For detailed usage, see [README.md](../README.md).

@@ -17,13 +17,13 @@ By default, test resources remain in the cluster after completion to allow for l
 ```bash
 # Automatic cleanup (recommended - already in all examples)
 docker run --gpus all --rm \
-  cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing:latest
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest
 ```
 
 **Manual Cleanup** (if you omit `--rm`):
 ```bash
 # List stopped containers
-docker ps -a --filter "ancestor=cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing"
+docker ps -a --filter "ancestor=ghcr.io/ahmabboud/gpu_cluster_testing"
 
 # Remove specific container
 docker rm <container-id>
@@ -360,7 +360,7 @@ kubectl get pods --all-namespaces --field-selector=status.phase=Failed \
 
 ```bash
 # Remove all stopped test containers
-docker ps -a --filter "ancestor=cr.eu-north1.nebius.cloud/e00tnz9wpyxva2s992/gpu_cluster_testing" -q | xargs docker rm
+docker ps -a --filter "ancestor=ghcr.io/ahmabboud/gpu_cluster_testing" -q | xargs docker rm
 
 # Remove all stopped containers (any image)
 docker container prune -f
