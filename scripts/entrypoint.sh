@@ -170,19 +170,19 @@ print_system_info() {
     echo ""
 }
 
+# Determine Python command (python or python3) - must be set globally
+if command -v python &> /dev/null; then
+    PYTHON_CMD=python
+elif command -v python3 &> /dev/null; then
+    PYTHON_CMD=python3
+else
+    echo "ERROR: Python not found"
+    exit 1
+fi
+
 # Health check before starting
 health_check() {
     echo "Running pre-flight health check..."
-    
-    # Determine Python command (python or python3)
-    if command -v python &> /dev/null; then
-        PYTHON_CMD=python
-    elif command -v python3 &> /dev/null; then
-        PYTHON_CMD=python3
-    else
-        echo "ERROR: Python not found"
-        exit 1
-    fi
     
     # Check if required Python packages are available
     $PYTHON_CMD -c "import torch" 2>/dev/null || {
