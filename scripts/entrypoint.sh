@@ -13,6 +13,12 @@
 
 set -e
 
+# Fix UCX/UCC library path conflicts (must be first)
+# Prepend HPC-X libraries to avoid conflicts with system libraries
+if [ -d "/opt/hpcx/ucx/lib" ] && [ -d "/opt/hpcx/ucc/lib" ]; then
+    export LD_LIBRARY_PATH="/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib:${LD_LIBRARY_PATH}"
+fi
+
 # Enable verbose NCCL debugging for infrastructure engineers
 export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
 export NCCL_DEBUG_SUBSYS=${NCCL_DEBUG_SUBSYS:-ALL}
@@ -173,10 +179,8 @@ print_system_info() {
 # Determine Python command (python or python3) - must be set globally
 if command -v python &> /dev/null; then
     PYTHON_CMD=python
-    echo "DEBUG: Using python command: $PYTHON_CMD"
 elif command -v python3 &> /dev/null; then
     PYTHON_CMD=python3
-    echo "DEBUG: Using python command: $PYTHON_CMD"
 else
     echo "ERROR: Python not found"
     exit 1
@@ -185,12 +189,10 @@ fi
 # Health check before starting
 health_check() {
     echo "Running pre-flight health check..."
-    echo "DEBUG: In health_check, PYTHON_CMD='$PYTHON_CMD'"
     
     # Check if required Python packages are available
     $PYTHON_CMD -c "import torch" || {
         echo "ERROR: PyTorch not found"
-        echo "DEBUG: Tried to run: $PYTHON_CMD -c 'import torch'"
         exit 1
     }
     
