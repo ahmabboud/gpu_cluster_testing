@@ -40,8 +40,8 @@ A portable, scale-agnostic tool for validating GPU cluster health, performance, 
 # From GitHub Container Registry (public)
 docker pull ghcr.io/ahmabboud/gpu_cluster_testing:latest
 
-# Or build locally
-docker build -t gpu_cluster_testing:latest .
+# Or build locally (for AMD64 GPU servers)
+docker build --platform linux/amd64 -t gpu_cluster_testing:latest .
 ```
 
 ### Single GPU Test
@@ -434,8 +434,8 @@ Both approaches are complementary. See [NCCL Testing Guide](docs/NCCL_TESTING.md
 git clone https://github.com/YOUR_USERNAME/gpu_cluster_testing.git
 cd gpu_cluster_testing
 
-# Build container
-docker build -t gpu-cluster-testing:local .
+# Build container (for AMD64 GPU servers)
+docker build --platform linux/amd64 -t gpu-cluster-testing:local .
 
 # Run local build
 docker run --gpus all --rm gpu-cluster-testing:local

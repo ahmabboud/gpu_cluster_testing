@@ -74,18 +74,30 @@ detect_and_configure_env() {
         echo "Manual Configuration Mode"
     fi
     
-    # Determine backend
+    # Determine backend - GPU REQUIRED for cluster acceptance testing
     if command -v nvidia-smi &> /dev/null && nvidia-smi &> /dev/null; then
         export BACKEND=${BACKEND:-nccl}
-        echo "GPU detected: Using NCCL backend"
+        echo "GPU detected: Using NCCL backend (required for GPU cluster testing)"
         
-        # Print GPU info
+        # Verify and count GPUs
+        NUM_GPUS=$(nvidia-smi --query-gpu=count --format=csv,noheader | head -n 1)
         echo ""
         echo "GPU Information:"
         nvidia-smi --query-gpu=index,name,memory.total --format=csv,noheader
+        echo ""
+        echo "Total GPUs detected: $NUM_GPUS"
+        
+        # Multi-GPU InfiniBand recommendation
+        if [ "$NUM_GPUS" -gt 1 ] || [ "$WORLD_SIZE" -gt 1 ]; then
+            echo ""
+            echo "⚠️  Multi-GPU/Multi-Node detected - InfiniBand recommended for best performance"
+        fi
     else
-        export BACKEND=${BACKEND:-gloo}
-        echo "No GPU detected: Using Gloo backend"
+        echo ""
+        echo "❌ ERROR: No NVIDIA GPUs detected!"
+        echo "This tool is designed for GPU cluster acceptance testing only."
+        echo "GPU availability is required."
+        exit 1
     fi
     
     echo ""
@@ -119,6 +131,35 @@ print_system_info() {
     echo ""
     echo "Network Interfaces:"
     ip addr show | grep -E "^[0-9]+:|inet " | head -n 10
+    
+    # InfiniBand/RDMA detection for multi-GPU scenarios
+    echo ""
+    echo "InfiniBand/RDMA Check:"
+    if [ -d "/sys/class/infiniband" ] && [ "$(ls -A /sys/class/infiniband 2>/dev/null)" ]; then
+        IB_DEVICES=$(ls /sys/class/infiniband/)
+        echo "  ✅ InfiniBand devices detected:"
+        for device in $IB_DEVICES; do
+            echo "    - $device"
+            if [ -f "/sys/class/infiniband/$device/ports/1/state" ]; then
+                STATE=$(cat /sys/class/infiniband/$device/ports/1/state 2>/dev/null | awk '{print $2}')
+                echo "      Port 1 state: $STATE"
+            fi
+        done
+        
+        # Check for RDMA devices
+        if [ -d "/dev/infiniband" ]; then
+            echo "  ✅ RDMA devices available: $(ls /dev/infiniband/ | wc -l) devices"
+            
+            # Set NCCL to use InfiniBand for multi-GPU
+            export NCCL_IB_DISABLE=${NCCL_IB_DISABLE:-0}
+            export NCCL_NET_GDR_LEVEL=${NCCL_NET_GDR_LEVEL:-5}
+            echo "  ✅ NCCL InfiniBand enabled (NCCL_IB_DISABLE=0)"
+        fi
+    else
+        echo "  ⚠️  No InfiniBand devices found"
+        echo "  Using Ethernet for multi-GPU communication"
+        export NCCL_IB_DISABLE=1
+    fi
     
     # NCCL environment variables
     echo ""

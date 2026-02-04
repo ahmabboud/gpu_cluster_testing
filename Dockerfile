@@ -2,9 +2,11 @@
 #
 # Base: NVIDIA PyTorch 24.07 (CUDA 12.5, Python 3.10)
 # Purpose: Zero-dependency distributed training for cluster validation
+# Platform: linux/amd64 (required for GPU servers)
 #
 
-FROM nvcr.io/nvidia/pytorch:24.07-py3
+# Explicitly specify linux/amd64 platform for cross-compilation
+FROM --platform=linux/amd64 nvcr.io/nvidia/pytorch:24.07-py3
 
 # Metadata
 LABEL maintainer="Nebius Infrastructure Engineering"

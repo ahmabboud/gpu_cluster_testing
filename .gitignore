@@ -27,6 +27,12 @@ results.json
 *.out
 *.err
 
+# Ignore test artifacts and temporary test files
+smoke-test.yaml
+dynamic-gpu-test.yaml
+test-*.yaml
+test-*.sh
+
 # Ignore Docker artifacts
 .dockerignore
 
@@ -51,3 +57,6 @@ nebius-solutions-library-soperator-v1.23.3/
 
 # Ignore env variables
 environment.sh
+
+# Ignore task definition files
+task/
