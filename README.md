@@ -43,7 +43,7 @@ A portable, scale-agnostic tool for validating GPU cluster health, performance, 
 - **kubectl access** with permissions to create pods/jobs
 - **NVIDIA GPU Operator** or device plugin installed
 - **GPU nodes labeled** (verify with `kubectl get nodes -L nvidia.com/gpu.product`)
-- **Optional**: PyTorch Operator for PyTorchJob CRD (`kubectl get crd pytorchjobs.kubeflow.org`)
+- **Optional**: Kubeflow Training Operator (PyTorchJob CRD) if you want to use `PyTorchJob` examples (`kubectl get crd pytorchjobs.kubeflow.org`)
 
 #### Quick Cluster Verification
 
@@ -54,9 +54,27 @@ kubectl get nodes -L nvidia.com/gpu.product
 # 2. Verify GPU resource allocation
 kubectl describe nodes | grep -A 5 "Allocated resources"
 
-# 3. Test GPU access with simple pod
-kubectl run gpu-test --image=nvidia/cuda:12.0-base --restart=Never --rm -it \
-  --limits='nvidia.com/gpu=1' -- nvidia-smi
+# 3. Test GPU access with a simple pod (portable across kubectl versions)
+cat <<'YAML' | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nvidia-smi-test
+spec:
+  restartPolicy: Never
+  containers:
+  - name: cuda
+    image: nvidia/cuda:12.2.0-base-ubuntu22.04
+    command: ["nvidia-smi"]
+    resources:
+      limits:
+        nvidia.com/gpu: 1
+      requests:
+        nvidia.com/gpu: 1
+YAML
+
+kubectl logs -f pod/nvidia-smi-test
+kubectl delete pod nvidia-smi-test --ignore-not-found=true
 ```
 
 ### For Slurm
@@ -136,23 +154,47 @@ docker run --gpus all --rm --ipc=host --network=host \
 **Start here** - Verify cluster before multi-node testing:
 
 ```bash
-kubectl run gpu-test \
-  --image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --restart=Never --rm -it \
-  --limits='nvidia.com/gpu=1' \
-  -- --model resnet18 --batch-size 128 --active-iterations 20
+kubectl apply -f examples/kubernetes-pod-single-gpu.yaml
+
+kubectl logs -f pod/gpu-cluster-test-single-gpu
+
+# Cleanup
+kubectl delete pod gpu-cluster-test-single-gpu --ignore-not-found=true
 ```
 
 **Expected output:**
 ```
 ✅ GPU detected: NVIDIA H100 80GB HBM3
 ✅ NCCL initialized successfully
-✅ Training completed: 1,795 samples/sec
+✅ Training completed: ~4,600 samples/sec (varies by GPU model)
 ```
 
 If successful, proceed to multi-GPU or multi-node tests below.
 
-### Kubernetes (with PyTorch Operator)
+### Kubernetes (CRD-free, no operator required)
+
+Single-node multi-GPU (torchrun standalone):
+
+```bash
+kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
+kubectl logs -f pod/gpu-cluster-test-multi-gpu-single-node
+kubectl delete pod gpu-cluster-test-multi-gpu-single-node --ignore-not-found=true
+```
+
+Multi-node DDP without an operator (StatefulSet + headless service):
+
+```bash
+kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
+
+# Follow logs (pod 0 is a good start)
+kubectl logs -f pod/gpu-cluster-test-ddp-0
+
+# Cleanup when finished
+kubectl delete statefulset gpu-cluster-test-ddp --ignore-not-found=true
+kubectl delete service gpu-cluster-test-ddp --ignore-not-found=true
+```
+
+### Kubernetes (with PyTorch Operator / PyTorchJob CRD)
 
 **Works on mixed GPU/non-GPU clusters**: The tool automatically schedules pods on GPU nodes using resource requests. No manual node selection needed.
 
@@ -230,7 +272,7 @@ kubectl apply -f pytorchjob.yaml
 
 Monitor:
 ```bash
-kubectl logs -f pytorch-job-master-0
+kubectl logs -f gpu-cluster-acceptance-test-master-0
 ```
 
 **For mixed clusters, verify GPU node labels:**
@@ -329,7 +371,7 @@ done
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--model` | `resnet50` | Model type: `resnet50` or `transformer` |
+| `--model` | `resnet50` | Model type: `resnet18`, `resnet50`, or `transformer` |
 | `--data-mode` | `synthetic` | Data source: `synthetic`, `cifar10`, `cifar100`, or `imagenet` |
 | `--data-dir` | `./data` | Directory for dataset storage (if using real datasets) |
 | `--batch-size` | `32` | Batch size per GPU |
@@ -653,29 +695,47 @@ Contributions are welcome! Please see the [Implementation Plan](docs/Exercise%20
 
 ## Examples
 
-### Quick Start (ResNet18 + FashionMNIST)
+### Quick Start (Single GPU, No Operator Required)
 ```bash
-kubectl apply -f examples/kubernetes-flexible-nebius-pattern.yaml
+kubectl apply -f examples/kubernetes-pod-single-gpu.yaml
+kubectl logs -f pod/gpu-cluster-test-single-gpu
 ```
-Configurable GPU count for flexible testing.
+Simple single-GPU test using plain Pod—works on any Kubernetes cluster with GPUs.
 
-### Production (Multi-GPU H100 Cluster)
+### Multi-GPU Single Node (No Operator Required)
+```bash
+kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
+kubectl logs -f pod/gpu-cluster-test-multi-gpu-single-node
+```
+Single-node torchrun DDP test.
+
+### Multi-Node DDP (No Operator Required)
+```bash
+kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
+kubectl logs -f pod/gpu-cluster-test-ddp-0
+```
+StatefulSet + headless service for multi-node DDP without PyTorchJob CRD.
+
+### Production (Multi-GPU H100 Cluster, PyTorchJob)
 ```bash
 kubectl apply -f examples/kubernetes-multi-gpu-nebius-optimized.yaml
 ```
-Fixed 8-GPU configuration for high-performance clusters.
+Fixed 8-GPU configuration for high-performance clusters (requires PyTorchJob CRD).
 
-### Standard (Any Kubernetes Cluster)
+### Standard (Any Kubernetes Cluster, PyTorchJob)
 ```bash
 kubectl apply -f examples/kubernetes-mixed-cluster.yaml
 ```
-Works on clusters with dedicated GPU nodes (and optional taints/labels).
+Works on clusters with dedicated GPU nodes (requires PyTorchJob CRD).
 
 See `examples/` directory for:
-- **kubernetes-flexible-nebius-pattern.yaml** - Configurable GPU count (ResNet18 + FashionMNIST)
-- **kubernetes-multi-gpu-nebius-optimized.yaml** - Fixed 8-GPU H100 configuration
-- **kubernetes-mixed-cluster.yaml** - Mixed GPU/non-GPU clusters (selectors, tolerations)
-- **kubernetes-with-auto-cleanup.yaml** - Automated cleanup configuration
+- **kubernetes-pod-single-gpu.yaml** - Simple single-GPU Pod (no operator required)
+- **kubernetes-pod-multi-gpu-single-node.yaml** - Multi-GPU single-node torchrun (no operator required)
+- **kubernetes-statefulset-multi-node-ddp.yaml** - Multi-node DDP via StatefulSet (no operator required)
+- **kubernetes-flexible-nebius-pattern.yaml** - Configurable GPU count (PyTorchJob CRD required)
+- **kubernetes-multi-gpu-nebius-optimized.yaml** - Fixed 8-GPU H100 configuration (PyTorchJob CRD required)
+- **kubernetes-mixed-cluster.yaml** - Mixed GPU/non-GPU clusters (PyTorchJob CRD required)
+- **kubernetes-with-auto-cleanup.yaml** - Automated cleanup configuration (PyTorchJob CRD required)
 - **slurm-nccl-test.sh** - Slurm NCCL bandwidth test script
 
 ## License

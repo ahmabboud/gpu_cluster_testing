@@ -1,0 +1,87 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-cluster-test-ddp
+  namespace: default
+  labels:
+    app: gpu-cluster-test
+spec:
+  clusterIP: None
+  selector:
+    app: gpu-cluster-test
+    mode: multi-node-ddp
+  ports:
+  - name: rendezvous
+    port: 29500
+    targetPort: 29500
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gpu-cluster-test-ddp
+  namespace: default
+  labels:
+    app: gpu-cluster-test
+spec:
+  serviceName: gpu-cluster-test-ddp
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gpu-cluster-test
+      mode: multi-node-ddp
+  template:
+    metadata:
+      labels:
+        app: gpu-cluster-test
+        mode: multi-node-ddp
+    spec:
+      containers:
+      - name: test
+        image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+        imagePullPolicy: Always
+        command: ["bash", "-lc"]
+        args:
+          - |
+            set -euo pipefail
+
+            ORDINAL="${HOSTNAME##*-}"
+            export NODE_RANK="$ORDINAL"
+            export MASTER_ADDR="gpu-cluster-test-ddp-0.gpu-cluster-test-ddp"
+            export MASTER_PORT="29500"
+
+            if [ -d /opt/hpcx/ucx/lib ] && [ -d /opt/hpcx/ucc/lib ]; then
+              export LD_LIBRARY_PATH="/opt/hpcx/ucx/lib:/opt/hpcx/ucc/lib:${LD_LIBRARY_PATH:-}"
+            fi
+
+            export NCCL_DEBUG=${NCCL_DEBUG:-INFO}
+            export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-eth0}
+
+            cd /workspace/src
+            echo "Running torchrun (multi-node): nnodes=${NNODES} node_rank=${NODE_RANK} nproc_per_node=${NPROC_PER_NODE}"
+
+            torchrun \
+              --nnodes="${NNODES}" \
+              --node_rank="${NODE_RANK}" \
+              --nproc_per_node="${NPROC_PER_NODE}" \
+              --rdzv_backend=c10d \
+              --rdzv_endpoint="${MASTER_ADDR}:${MASTER_PORT}" \
+              train.py --model resnet50 --batch-size 32 --warmup-iterations 20 --active-iterations 100 --data-mode synthetic
+        env:
+        - name: NNODES
+          value: "2"
+        - name: NPROC_PER_NODE
+          value: "1"
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+          limits:
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm
+      volumes:
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 8Gi

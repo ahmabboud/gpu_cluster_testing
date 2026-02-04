@@ -48,11 +48,10 @@ def setup_distributed():
     
     # Initialize process group
     if world_size > 1:
+        # torchrun sets MASTER_ADDR/MASTER_PORT automatically; use env:// to let PyTorch read them
         dist.init_process_group(
             backend=backend,
-            init_method=os.environ.get("MASTER_ADDR", "env://"),
-            world_size=world_size,
-            rank=rank
+            init_method="env://",
         )
     
     return rank, world_size, local_rank, backend

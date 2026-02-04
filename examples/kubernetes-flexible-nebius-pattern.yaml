@@ -1,12 +1,14 @@
-apiVersion: "kubeflow.org/v2beta1"
+apiVersion: kubeflow.org/v1
 kind: PyTorchJob
 metadata:
   name: gpu-cluster-test-flexible
   namespace: default
 spec:
-  elasticPolicy: null
-  
-  pytorchReplicaSpec:
+  runPolicy:
+    cleanPodPolicy: Running
+    ttlSecondsAfterFinished: 86400  # Delete after 24 hours
+
+  pytorchReplicaSpecs:
     Master:
       replicas: 1
       restartPolicy: OnFailure
@@ -36,11 +38,11 @@ spec:
             # - For Nebius H100: nvidia.com/gpu: 8, cpu: 112, memory: 1200Gi
             resources:
               requests:
-                nvidia.com/gpu: "1"  # CHANGE THIS based on your needs
+                nvidia.com/gpu: 1  # CHANGE THIS based on your needs
                 cpu: "4"
                 memory: 16Gi
               limits:
-                nvidia.com/gpu: "1"  # CHANGE THIS based on your needs
+                nvidia.com/gpu: 1  # CHANGE THIS based on your needs
                 cpu: "8"
                 memory: 32Gi
             
@@ -74,11 +76,12 @@ spec:
             - "resnet18"
             - "--batch-size"
             - "128"
-            - "--num-iterations"
+            - "--warmup-iterations"
+            - "20"
+            - "--active-iterations"
             - "100"
             - "--data-mode"
             - "fashion_mnist"
-            - "--save-results"
           
           volumes:
           - name: dshm
@@ -112,11 +115,11 @@ spec:
             # MATCH MASTER RESOURCES
             resources:
               requests:
-                nvidia.com/gpu: "1"  # CHANGE THIS to match master
+                nvidia.com/gpu: 1  # CHANGE THIS to match master
                 cpu: "4"
                 memory: 16Gi
               limits:
-                nvidia.com/gpu: "1"  # CHANGE THIS to match master
+                nvidia.com/gpu: 1  # CHANGE THIS to match master
                 cpu: "8"
                 memory: 32Gi
             
@@ -138,7 +141,9 @@ spec:
             - "resnet18"
             - "--batch-size"
             - "128"
-            - "--num-iterations"
+            - "--warmup-iterations"
+            - "20"
+            - "--active-iterations"
             - "100"
             - "--data-mode"
             - "fashion_mnist"
@@ -149,9 +154,6 @@ spec:
               medium: Memory
               sizeLimit: 4Gi
 
-  runPolicy:
-    cleanPodPolicy: Running
-    ttlSecondsAfterFinished: 86400  # Delete after 24 hours
 
 ---
 # Configuration Examples:

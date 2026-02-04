@@ -1,14 +1,14 @@
-apiVersion: "kubeflow.org/v2beta1"
+apiVersion: kubeflow.org/v1
 kind: PyTorchJob
 metadata:
   name: gpu-cluster-test-multi-gpu-nebius
   namespace: default
 spec:
-  # Elastic training disabled for consistent testing
-  elasticPolicy: null
-  
-  pytorchReplicaSpec:
-    # Master/Worker configuration
+  runPolicy:
+    cleanPodPolicy: Running  # Keep completed pods for log inspection
+    ttlSecondsAfterFinished: 86400  # Delete job after 24 hours
+
+  pytorchReplicaSpecs:
     Master:
       replicas: 1
       restartPolicy: OnFailure
@@ -18,16 +18,6 @@ spec:
             app: gpu-cluster-test
             role: master
         spec:
-          # ====================================
-          # NEBIUS BEST PRACTICE: Init Container
-          # ====================================
-          initContainers:
-          - name: init-ulimit
-            image: busybox:1.27.2
-            command: ['sh', '-c', 'ulimit -Hn unlimited && ulimit -Sn unlimited && ulimit -Hl unlimited && ulimit -Sl unlimited']
-            securityContext:
-              privileged: true
-          
           containers:
           - name: pytorch
             image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
@@ -42,12 +32,12 @@ spec:
             resources:
               requests:
                 nvidia.com/gpu: 8
-                cpu: 100
-                memory: 1000Gi
+                cpu: "32"
+                memory: "128Gi"
               limits:
                 nvidia.com/gpu: 8
-                cpu: 112
-                memory: 1200Gi
+                cpu: "64"
+                memory: "256Gi"
             
             # ====================================
             # NEBIUS BEST PRACTICE: Shared Memory
@@ -58,20 +48,7 @@ spec:
             - name: dshm
               mountPath: /dev/shm
             
-            # Environment variables
             env:
-            # Model configuration
-            - name: MODEL
-              value: "resnet50"
-            - name: BATCH_SIZE
-              value: "64"
-            - name: NUM_ITERATIONS
-              value: "100"
-            - name: DATA_MODE
-              value: "synthetic"
-            
-            # NCCL configuration for InfiniBand (Nebius-optimized)
-            # Adjust based on your cluster's network topology
             - name: NCCL_DEBUG
               value: "INFO"  # WARN for production, INFO for debugging
             - name: NCCL_SOCKET_IFNAME
@@ -96,11 +73,12 @@ spec:
             - "resnet50"
             - "--batch-size"
             - "64"
-            - "--num-iterations"
+            - "--warmup-iterations"
+            - "20"
+            - "--active-iterations"
             - "100"
             - "--data-mode"
             - "synthetic"
-            - "--save-results"
           
           # ====================================
           # NEBIUS BEST PRACTICE: Shared Memory Volume
@@ -112,7 +90,7 @@ spec:
               sizeLimit: 32Gi  # Adjust based on needs
     
     Worker:
-      replicas: 2  # Number of worker nodes (each with 8 GPUs)
+      replicas: 1  # Number of worker nodes (each with 8 GPUs)
       restartPolicy: OnFailure
       template:
         metadata:
@@ -122,16 +100,6 @@ spec:
         spec:
           # Disable service account token mounting (security best practice)
           automountServiceAccountToken: false
-          
-          # ====================================
-          # NEBIUS BEST PRACTICE: Init Container
-          # ====================================
-          initContainers:
-          - name: init-ulimit
-            image: busybox:1.27.2
-            command: ['sh', '-c', 'ulimit -Hn unlimited && ulimit -Sn unlimited && ulimit -Hl unlimited && ulimit -Sl unlimited']
-            securityContext:
-              privileged: true
           
           containers:
           - name: pytorch
@@ -144,12 +112,12 @@ spec:
             resources:
               requests:
                 nvidia.com/gpu: 8
-                cpu: 100
-                memory: 1000Gi
+                cpu: "32"
+                memory: "128Gi"
               limits:
                 nvidia.com/gpu: 8
-                cpu: 112
-                memory: 1200Gi
+                cpu: "64"
+                memory: "256Gi"
             
             # ====================================
             # NEBIUS BEST PRACTICE: Shared Memory
@@ -180,7 +148,9 @@ spec:
             - "resnet50"
             - "--batch-size"
             - "64"
-            - "--num-iterations"
+            - "--warmup-iterations"
+            - "20"
+            - "--active-iterations"
             - "100"
             - "--data-mode"
             - "synthetic"
@@ -193,79 +163,3 @@ spec:
             emptyDir:
               medium: Memory
               sizeLimit: 32Gi
-  
-  # ====================================
-  # CLEANUP POLICY
-  # ====================================
-  runPolicy:
-    cleanPodPolicy: Running  # Clean pods only when job is running (keep logs after completion)
-    ttlSecondsAfterFinished: 86400  # Delete job after 24 hours
-
----
-# Optional: Automated cleanup CronJob
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: cleanup-gpu-tests
-  namespace: default
-spec:
-  schedule: "0 2 * * *"  # Daily at 2 AM
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          serviceAccountName: cleanup-sa  # Create this SA with appropriate permissions
-          restartPolicy: OnFailure
-          containers:
-          - name: cleanup
-            image: bitnami/kubectl:latest
-            command:
-            - /bin/bash
-            - -c
-            - |
-              # Delete completed PyTorchJobs older than 7 days
-              kubectl get pytorchjobs.kubeflow.org -n default -o json | \
-                jq -r '.items[] | select(.status.conditions[]? | select(.type=="Succeeded" or .type=="Failed")) | select((now - (.status.completionTime | fromdateiso8601)) > 604800) | .metadata.name' | \
-                xargs -r kubectl delete pytorchjob -n default
-              
-              # Delete completed pods older than 7 days
-              kubectl get pods -n default --field-selector=status.phase=Succeeded -o json | \
-                jq -r '.items[] | select((now - (.status.startTime | fromdateiso8601)) > 604800) | .metadata.name' | \
-                xargs -r kubectl delete pod -n default
-
----
-# ServiceAccount for cleanup CronJob
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: cleanup-sa
-  namespace: default
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: cleanup-role
-  namespace: default
-rules:
-- apiGroups: ["kubeflow.org"]
-  resources: ["pytorchjobs"]
-  verbs: ["get", "list", "delete"]
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "delete"]
-
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: cleanup-rolebinding
-  namespace: default
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: cleanup-role
-subjects:
-- kind: ServiceAccount
-  name: cleanup-sa
-  namespace: default
