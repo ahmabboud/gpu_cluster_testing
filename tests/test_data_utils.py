@@ -8,8 +8,8 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from data_utils import (
-    generate_synthetic_image_data,
-    generate_synthetic_text_data,
+    create_synthetic_image_batch,
+    create_synthetic_text_batch,
     create_synthetic_dataloader
 )
 
@@ -17,8 +17,8 @@ from data_utils import (
 class TestSyntheticImageData:
     def test_generate_image_data_rgb(self):
         """Test RGB image generation"""
-        images, labels = generate_synthetic_image_data(
-            num_samples=100, 
+        images, labels = create_synthetic_image_batch(
+            batch_size=100, 
             image_size=(224, 224), 
             num_classes=1000,
             channels=3
@@ -29,8 +29,8 @@ class TestSyntheticImageData:
         
     def test_generate_image_data_grayscale(self):
         """Test grayscale image generation"""
-        images, labels = generate_synthetic_image_data(
-            num_samples=100, 
+        images, labels = create_synthetic_image_batch(
+            batch_size=100, 
             image_size=(28, 28), 
             num_classes=10,
             channels=1
@@ -43,8 +43,8 @@ class TestSyntheticImageData:
 class TestSyntheticTextData:
     def test_generate_text_data(self):
         """Test text sequence generation"""
-        sequences, labels = generate_synthetic_text_data(
-            num_samples=100,
+        sequences, labels = create_synthetic_text_batch(
+            batch_size=100,
             seq_length=128,
             vocab_size=10000,
             num_classes=10
