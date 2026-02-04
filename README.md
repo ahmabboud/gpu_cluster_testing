@@ -84,125 +84,85 @@ kubectl delete pod nvidia-smi-test --ignore-not-found=true
 - Singularity or similar container runtime
 - Access to GPU partitions
 
-## Quick Start
+## Quick Start (Kubernetes)
 
-### Pull the Container
+These commands work from any machine with `kubectl` access to a GPU cluster. No local GPU required.
 
-```bash
-# From GitHub Container Registry (public)
-docker pull ghcr.io/ahmabboud/gpu_cluster_testing:latest
-
-# Or build locally (for AMD64 GPU servers)
-docker build --platform linux/amd64 -t gpu_cluster_testing:latest .
-```
-
-### Single GPU Test
+### 1. Single GPU Test
 
 ```bash
-docker run --gpus all --rm \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet18 \
-  --batch-size 128 \
-  --data-mode fashion_mnist
-```
-
-### Quick Test (ResNet18 + FashionMNIST)
-
-```bash
-# Lightweight validation with real dataset
-docker run --gpus all --rm --ipc=host \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet18 \
-  --batch-size 128 \
-  --data-mode fashion_mnist
-```
-
-### Multi-GPU Test (Single Node)
-
-```bash
-# Using torchrun (recommended)
-docker run --gpus all --rm --ipc=host \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c "cd /workspace/src && torchrun --nproc_per_node=8 train.py --model resnet50 --batch-size 32"
-```
-
-### Multi-Node Test Configuration
-
-For multi-node testing, proper NCCL configuration is critical:
-
-**With InfiniBand:**
-```bash
-docker run --gpus all --rm --ipc=host --network=host \
-  -e NCCL_IB_DISABLE=0 \
-  -e NCCL_IB_HCA=mlx5_0 \
-  -e NCCL_DEBUG=INFO \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet50 --batch-size 64
-```
-
-**With Ethernet:**
-```bash
-docker run --gpus all --rm --ipc=host --network=host \
-  -e NCCL_SOCKET_IFNAME=eth0 \
-  -e NCCL_DEBUG=INFO \
-  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  --model resnet50 --batch-size 64
-```
-
-## Deployment Examples
-
-### Kubernetes - Simple Single-GPU Test
-
-**Start here** - Verify cluster before multi-node testing:
-
-```bash
+# Deploy single-GPU test pod
 kubectl apply -f examples/kubernetes-pod-single-gpu.yaml
 
+# Follow logs
 kubectl logs -f pod/gpu-cluster-test-single-gpu
 
 # Cleanup
 kubectl delete pod gpu-cluster-test-single-gpu --ignore-not-found=true
 ```
 
-**Expected output:**
+**Expected output (~4,600 samples/sec on H100):**
 ```
 ✅ GPU detected: NVIDIA H100 80GB HBM3
 ✅ NCCL initialized successfully
-✅ Training completed: ~4,600 samples/sec (varies by GPU model)
+Throughput: 4609.23 samples/sec
 ```
 
-If successful, proceed to multi-GPU or multi-node tests below.
-
-### Kubernetes (CRD-free, no operator required)
-
-Single-node multi-GPU (torchrun standalone):
+### 2. Multi-GPU Test (Single Node with NCCL)
 
 ```bash
+# Deploy multi-GPU test pod (uses torchrun for DDP)
 kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
+
+# Follow logs
 kubectl logs -f pod/gpu-cluster-test-multi-gpu-single-node
+
+# Cleanup
 kubectl delete pod gpu-cluster-test-multi-gpu-single-node --ignore-not-found=true
 ```
 
-**Expected output (2 GPUs):**
+**Expected output (~15,000 samples/sec on 2× H100, scales linearly):**
 ```
 ✅ NCCL initialized: nranks=2
-✅ Training completed: ~9,000-15,000 samples/sec (scales ~linearly with GPU count)
+✅ Using InfiniBand: mlx5_0
+Throughput: 15616.41 samples/sec
 ```
 
-Multi-node DDP without an operator (StatefulSet + headless service):
+### 3. Multi-Node DDP Test (Optional)
 
 ```bash
+# Deploy StatefulSet for multi-node distributed training
 kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
 
-# Follow logs (pod 0 is a good start)
+# Follow logs from rank 0
 kubectl logs -f pod/gpu-cluster-test-ddp-0
 
-# Cleanup when finished
-kubectl delete statefulset gpu-cluster-test-ddp --ignore-not-found=true
-kubectl delete service gpu-cluster-test-ddp --ignore-not-found=true
+# Cleanup
+kubectl delete statefulset gpu-cluster-test-ddp service/gpu-cluster-test-ddp --ignore-not-found=true
 ```
 
-### Kubernetes (with PyTorch Operator / PyTorchJob CRD)
+## Quick Start (Docker - requires local GPU)
+
+For machines with direct GPU access:
+
+```bash
+# Pull container
+docker pull ghcr.io/ahmabboud/gpu_cluster_testing:latest
+
+# Single GPU test
+docker run --gpus all --rm ghcr.io/ahmabboud/gpu_cluster_testing:latest \
+  --model resnet18 --batch-size 128
+
+# Multi-GPU test (8 GPUs)
+docker run --gpus all --rm --ipc=host ghcr.io/ahmabboud/gpu_cluster_testing:latest \
+  bash -c "torchrun --nproc_per_node=8 /workspace/src/train.py --model resnet50 --batch-size 32"
+```
+
+## Additional Deployment Examples
+
+### Kubernetes (with PyTorchJob CRD)
+
+> **Note**: Requires Kubeflow Training Operator installed. Check with: `kubectl get crd pytorchjobs.kubeflow.org`
 
 **Works on mixed GPU/non-GPU clusters**: The tool automatically schedules pods on GPU nodes using resource requests. No manual node selection needed.
 
