@@ -112,17 +112,16 @@ def generate_synthetic_batch(batch_size, num_channels, height, width,
 │                                                             │
 │ ┌─────────────────────────────────────────────────────┐   │
 │ │ Detect Environment:                                 │   │
-│ │ - Slurm? Check SLURM_PROCID                         │   │
 │ │ - Kubernetes? Check KUBERNETES_SERVICE_HOST         │   │
-│ │ - Bare metal? Use manual env vars                   │   │
+│ │ - Docker/Manual? Use environment variables          │   │
 │ └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │ ┌─────────────────────────────────────────────────────┐   │
 │ │ Map Variables:                                      │   │
-│ │ SLURM_PROCID    → RANK                              │   │
-│ │ SLURM_NTASKS    → WORLD_SIZE                        │   │
-│ │ SLURM_LOCALID   → LOCAL_RANK                        │   │
-│ │ SLURM_NODELIST  → MASTER_ADDR (first node)         │   │
+│ │ RANK          → Process rank                        │   │
+│ │ WORLD_SIZE    → Total GPUs                          │   │
+│ │ LOCAL_RANK    → GPU index on this node              │   │
+│ │ MASTER_ADDR   → Master node address                 │   │
 │ └─────────────────────────────────────────────────────┘   │
 │                                                             │
 │ ┌─────────────────────────────────────────────────────┐   │
@@ -399,7 +398,7 @@ Total Size: ~12 GB
 1. **Network diagnostics**: So you can debug connectivity issues
 2. **NCCL test binaries**: For focused bandwidth testing
 3. **Our training code**: The actual test logic
-4. **entrypoint.sh**: Auto-detects Slurm/K8s/bare metal
+4. **entrypoint.sh**: Auto-detects Kubernetes/Docker environment
 
 ---
 
@@ -483,7 +482,7 @@ torch.randn()  # That's it!
 3. Cluster stability (sustained load)
 
 **How It Works**:
-1. Detect environment (Slurm/K8s/bare metal)
+1. Detect environment (Kubernetes/Docker)
 2. Initialize distributed training (connect all GPUs)
 3. Generate data in GPU memory (no database!)
 4. Train model (tests compute + NCCL)

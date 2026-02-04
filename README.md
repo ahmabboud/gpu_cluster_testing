@@ -17,7 +17,7 @@ A portable, scale-agnostic tool for validating GPU cluster health, performance, 
   - **ResNet50** - 25M parameters (comprehensive testing)
   - **Transformer** - Configurable size (bandwidth testing)
 - **📊 Comprehensive Testing**: Tests GPU compute, memory, and NCCL communication
-- **🔧 Universal Compatibility**: Works on Kubernetes, Slurm, and bare metal
+- **🔧 Universal Compatibility**: Works on any Kubernetes cluster with GPU nodes
 - **📈 Performance Profiling**: Detailed metrics including throughput, step time, and NCCL overhead
 - **🔍 Diagnostic Rich**: Verbose NCCL logging for troubleshooting
 - **⚡ Two Test Modes**:
@@ -79,12 +79,7 @@ kubectl logs -f pod/nvidia-smi-test
 kubectl delete pod nvidia-smi-test --ignore-not-found=true
 ```
 
-### For Slurm
-- Slurm with GPU support
-- Singularity or similar container runtime
-- Access to GPU partitions
-
-## Quick Start (Kubernetes)
+#### Quick Cluster Verification
 
 These commands work from any machine with `kubectl` access to a GPU cluster. No local GPU required.
 
@@ -257,42 +252,9 @@ kubectl label nodes <node-name> accelerator=nvidia-gpu
 
 **Advanced Example**: For production deployments on mixed clusters with node affinity, tolerations, and anti-affinity rules, see [examples/kubernetes-mixed-cluster.yaml](examples/kubernetes-mixed-cluster.yaml).
 
-### Slurm
+### Docker (Local Testing)
 
-Create a Slurm batch script `acceptance_test.sh`:
-
-```bash
-#!/bin/bash
-#SBATCH --job-name=gpu-acceptance
-#SBATCH --nodes=4
-#SBATCH --ntasks-per-node=8
-#SBATCH --gpus-per-task=1
-#SBATCH --time=01:00:00
-#SBATCH --output=acceptance-%j.out
-
-# Load container runtime
-module load singularity
-
-# Convert Docker image to Singularity (if needed)
-# singularity pull docker://ghcr.io/ahmabboud/gpu_cluster_testing:latest
-
-# Run with Slurm
-srun singularity exec --nv \
-  gpu_cluster_testing_latest.sif \
-  /workspace/scripts/entrypoint.sh \
-  --model resnet50 \
-  --batch-size 64 \
-  --active-iterations 100
-```
-
-Submit:
-```bash
-sbatch acceptance_test.sh
-```
-
-### Bare Metal (Multi-Node)
-
-On the master node:
+On a machine with NVIDIA GPUs:
 
 ```bash
 export MASTER_ADDR=<master-node-ip>
@@ -300,39 +262,17 @@ export MASTER_PORT=29500
 export WORLD_SIZE=16  # Total number of GPUs
 export NCCL_SOCKET_IFNAME=eth0  # Adjust to your network interface
 
-# Start rank 0-7
-for i in {0..7}; do
-  RANK=$i LOCAL_RANK=$i \
-    docker run --gpus device=$i --rm --network=host \
-    -e MASTER_ADDR=$MASTER_ADDR \
-    -e MASTER_PORT=$MASTER_PORT \
-    -e RANK=$i \
-    -e WORLD_SIZE=$WORLD_SIZE \
-    -e LOCAL_RANK=$i \
-    ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-    --model resnet50 --batch-size 32 &
-done
-```
+# Single GPU test
+docker run --gpus all --rm \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
+  --model resnet50 --batch-size 32
 
-On worker nodes (adjust RANK values accordingly):
-
-```bash
-export MASTER_ADDR=<master-node-ip>
-export MASTER_PORT=29500
-export WORLD_SIZE=16
-
-# Start rank 8-15 on second node
-for i in {0..7}; do
-  RANK=$((i+8)) LOCAL_RANK=$i \
-    docker run --gpus device=$i --rm --network=host \
-    -e MASTER_ADDR=$MASTER_ADDR \
-    -e MASTER_PORT=$MASTER_PORT \
-    -e RANK=$((i+8)) \
-    -e WORLD_SIZE=$WORLD_SIZE \
-    -e LOCAL_RANK=$i \
-    ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-    --model resnet50 --batch-size 32 &
-done
+# Multi-GPU test (single node, 2 GPUs)
+docker run --gpus '"device=0,1"' --rm \
+  -e WORLD_SIZE=2 \
+  ghcr.io/ahmabboud/gpu_cluster_testing:latest \
+  torchrun --standalone --nproc_per_node=2 \
+  src/train.py --model resnet18 --batch-size 32 --active-iterations 50
 ```
 
 ## Command-Line Options
@@ -476,19 +416,15 @@ docker run --gpus all --rm --ipc=host --network=host \
 
 Expected result: **200-240 GB/s** for HDR InfiniBand
 
-### Multi-Node NCCL Test (Slurm)
+### Multi-Node NCCL Test (Kubernetes)
 
-Use the provided script:
+Use the StatefulSet example for multi-node DDP testing:
 ```bash
-sbatch examples/slurm-nccl-test.sh
-tail -f results/nccl_bandwidth_*.out
+kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
+kubectl logs -f pod/gpu-cluster-test-ddp-0
 ```
 
-Tests performed:
-1. NVLink performance (single node)
-2. InfiniBand performance (forced IB)
-3. Multi-node all-reduce
-4. Latency measurement
+This tests NCCL communication across multiple nodes via InfiniBand.
 
 **When to use NCCL tests vs Full Training:**
 - **NCCL tests** (2-5 min): Quick infrastructure validation, network debugging
@@ -500,8 +436,7 @@ Both approaches are complementary. See [NCCL Testing Guide](docs/NCCL_TESTING.md
 
 ### Detected Automatically
 
-- **Slurm**: `SLURM_PROCID`, `SLURM_NTASKS`, `SLURM_LOCALID`, `SLURM_NODELIST`
-- **Kubernetes**: Typically set by PyTorch operators
+- **Kubernetes**: `KUBERNETES_SERVICE_HOST`, or set via Pod spec
 
 ### Manual Configuration
 
@@ -539,7 +474,6 @@ docker run --gpus all --rm gpu-cluster-testing:local
 |----------|----------|----------------|
 | **Docker** | ✅ Auto-cleanup (all examples use `--rm`) | No action needed |
 | **Kubernetes** | ❌ Jobs/pods remain after completion | Configure TTL or manual cleanup |
-| **Slurm** | ⚠️ Jobs terminate, logs remain | Implement log rotation |
 
 ### Quick Cleanup Commands
 
@@ -553,12 +487,6 @@ kubectl delete pytorchjob -l app=gpu-acceptance-test
 
 # Automated cleanup script
 ./scripts/cleanup-k8s-tests.sh default 24  # Clean up tests older than 24h
-```
-
-**Slurm**:
-```bash
-# Clean up old logs
-./scripts/cleanup-slurm-logs.sh ./results 7  # Keep last 7 days
 ```
 
 ### Automatic Cleanup (Kubernetes)
@@ -638,7 +566,7 @@ gpu_cluster_testing/
 ├── scripts/
 │   └── entrypoint.sh           # Universal environment detection
 │   └── verify-k8s-gpu-cluster.sh # Optional cluster verification helper
-├── examples/                    # Kubernetes/Slurm examples
+├── examples/                    # Kubernetes examples
 ├── Dockerfile                  # Container definition
 └── .github/
     └── workflows/
@@ -704,7 +632,6 @@ See `examples/` directory for:
 - **kubernetes-multi-gpu-nebius-optimized.yaml** - Fixed 8-GPU H100 configuration (PyTorchJob CRD required)
 - **kubernetes-mixed-cluster.yaml** - Mixed GPU/non-GPU clusters (PyTorchJob CRD required)
 - **kubernetes-with-auto-cleanup.yaml** - Automated cleanup configuration (PyTorchJob CRD required)
-- **slurm-nccl-test.sh** - Slurm NCCL bandwidth test script
 
 ## License
 

@@ -2,13 +2,12 @@
 #
 # Universal Entrypoint for GPU Cluster Acceptance Testing
 #
-# This script auto-detects the orchestration environment (Slurm, Kubernetes, or Bare Metal)
+# This script auto-detects the orchestration environment (Kubernetes or Docker)
 # and maps the appropriate environment variables to PyTorch distributed standards.
 #
 # Supported Environments:
-# - Slurm: Uses SLURM_* variables
 # - Kubernetes: Uses Kubernetes pod-specific variables
-# - Bare Metal: Uses manually set RANK, WORLD_SIZE, etc.
+# - Docker/Manual: Uses manually set RANK, WORLD_SIZE, etc.
 #
 
 set -e
@@ -29,33 +28,11 @@ detect_and_configure_env() {
     echo "Environment Detection"
     echo "========================================"
     
-    # Check if running in Slurm
-    if [ -n "$SLURM_PROCID" ]; then
-        echo "Detected: SLURM environment"
-        
-        # Map Slurm variables to PyTorch distributed variables
-        export RANK=${SLURM_PROCID}
-        export WORLD_SIZE=${SLURM_NTASKS:-1}
-        export LOCAL_RANK=${SLURM_LOCALID:-0}
-        
-        # Slurm master address configuration
-        if [ -n "$SLURM_NODELIST" ]; then
-            # Get the first node as master
-            MASTER_NODE=$(scontrol show hostnames "$SLURM_NODELIST" | head -n 1)
-            export MASTER_ADDR=${MASTER_ADDR:-$MASTER_NODE}
-        fi
-        export MASTER_PORT=${MASTER_PORT:-29500}
-        
-        echo "SLURM Configuration:"
-        echo "  Job ID: $SLURM_JOB_ID"
-        echo "  Nodes: $SLURM_NODELIST"
-        echo "  Tasks per Node: $SLURM_TASKS_PER_NODE"
-        
     # Check if running in Kubernetes
-    elif [ -n "$KUBERNETES_SERVICE_HOST" ] || [ -n "$K8S_MASTER_ADDR" ]; then
+    if [ -n "$KUBERNETES_SERVICE_HOST" ] || [ -n "$K8S_MASTER_ADDR" ]; then
         echo "Detected: Kubernetes environment"
         
-        # Kubernetes variables (typically set by PyTorch operators or custom scripts)
+        # Kubernetes variables (typically set by operators or custom scripts)
         export RANK=${RANK:-0}
         export WORLD_SIZE=${WORLD_SIZE:-1}
         export LOCAL_RANK=${LOCAL_RANK:-0}
@@ -66,9 +43,9 @@ detect_and_configure_env() {
         echo "  Pod Name: ${HOSTNAME}"
         echo "  Namespace: ${POD_NAMESPACE:-default}"
         
-    # Bare metal or manual configuration
+    # Docker / Manual configuration
     else
-        echo "Detected: Bare Metal / Manual Configuration"
+        echo "Detected: Docker / Manual Configuration"
         
         # Use environment variables as-is, with defaults for single-GPU testing
         export RANK=${RANK:-0}

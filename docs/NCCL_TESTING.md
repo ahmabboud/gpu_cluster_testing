@@ -39,36 +39,9 @@ Both are valuable and serve different purposes.
 | **Portability** | Excellent | Good (needs nccl-tests) |
 | **Acceptance** | Production readiness | Infrastructure readiness |
 
-## Option 1: Using NCCL Test Binaries (Slurm)
+## NCCL Testing on Kubernetes
 
-### Prerequisites
-
-Install NCCL test suite:
-```bash
-git clone https://github.com/NVIDIA/nccl-tests.git
-cd nccl-tests
-make MPI=1 MPI_HOME=/path/to/mpi
-export PATH=$PWD/build:$PATH
-```
-
-### Running Tests
-
-Use the provided Slurm script:
-```bash
-# Submit the job
-sbatch examples/slurm-nccl-test.sh
-
-# Monitor output
-tail -f results/nccl_bandwidth_*.out
-```
-
-The script tests:
-1. **NVLink Performance**: GPU-to-GPU on single node
-2. **InfiniBand Performance**: Forced IB by disabling P2P/SHM
-3. **Multi-Node All-Reduce**: Cross-node communication
-4. **Latency**: Small message performance
-
-### Expected Results
+### Quick Single-Node Test
 
 **H100 PCIe with NVLink:**
 ```
@@ -89,11 +62,9 @@ Size      Count    Type   Time    AlgBw   BusBw
 8         10000    float  48.21   0.00    0.00    <-- Target: <50 μs
 ```
 
-## Option 2: Using Our Container (Kubernetes/Slurm)
+### Using Our Container on Kubernetes
 
 Our container includes NCCL tests in `/workspace/nccl-tests/`.
-
-### Quick Test on Kubernetes
 
 ```yaml
 apiVersion: v1
@@ -118,64 +89,73 @@ spec:
     nvidia.com/gpu.product: NVIDIA-H100-PCIe
 ```
 
-### Quick Test on Slurm
-
-```bash
-# Single node test
-srun --nodes=1 --gpus-per-node=8 --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c 'cd /workspace/nccl-tests && mpirun --allow-run-as-root -np 8 ./build/all_reduce_perf -b 8K -e 8G -f 2 -g 1'
-
-# Multi-node test
-srun --nodes=2 --ntasks-per-node=8 --gpus-per-node=8 --mpi=pmix \
-  --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c 'cd /workspace/nccl-tests && ./build/all_reduce_perf_mpi -b 8K -e 8G -f 2 -g 1'
-```
-
-## Option 3: Testing Specific Network Modes
+## Testing Specific Network Modes
 
 ### Test NVLink Only (Single Node)
 
-```bash
-# Default behavior - uses NVLink between GPUs on same node
-srun --nodes=1 --gpus-per-node=8 \
-  --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c 'cd /workspace/nccl-tests && mpirun --allow-run-as-root -np 8 ./build/all_reduce_perf -b 512M -e 8G -f 2 -g 1'
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-nvlink-test
+spec:
+  restartPolicy: Never
+  containers:
+  - name: nccl-test
+    image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+    command: ["/bin/bash", "-c"]
+    args:
+      - |
+        cd /workspace/nccl-tests
+        mpirun --allow-run-as-root -np 8 --bind-to none \
+          ./build/all_reduce_perf -b 512M -e 8G -f 2 -g 1
+    resources:
+      limits:
+        nvidia.com/gpu: 8
 ```
 
 **Expected**: 400-450 GB/s for H100 with NVLink
 
 ### Test InfiniBand Only (Force IB)
 
-```bash
-# Disable P2P and SHM to force InfiniBand usage
-srun --nodes=1 --gpus-per-node=8 \
-  --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c '
-    export NCCL_P2P_DISABLE=1
-    export NCCL_SHM_DISABLE=1
-    export NCCL_ALGO=Ring
-    export NCCL_DEBUG=INFO
-    cd /workspace/nccl-tests
-    mpirun --allow-run-as-root -np 8 ./build/all_reduce_perf -b 512M -e 8G -f 2 -g 1
-  '
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nccl-infiniband-test
+spec:
+  restartPolicy: Never
+  containers:
+  - name: nccl-test
+    image: ghcr.io/ahmabboud/gpu_cluster_testing:latest
+    command: ["/bin/bash", "-c"]
+    args:
+      - |
+        # Disable P2P and SHM to force InfiniBand usage
+        export NCCL_P2P_DISABLE=1
+        export NCCL_SHM_DISABLE=1
+        export NCCL_ALGO=Ring
+        export NCCL_DEBUG=INFO
+        cd /workspace/nccl-tests
+        mpirun --allow-run-as-root -np 8 --bind-to none \
+          ./build/all_reduce_perf -b 512M -e 8G -f 2 -g 1
+    resources:
+      limits:
+        nvidia.com/gpu: 8
 ```
 
 **Expected**: 200-240 GB/s for HDR InfiniBand (200 Gbps per port)
 
-### Test Multi-Node InfiniBand
+### Multi-Node NCCL Test via StatefulSet
+
+For multi-node NCCL testing, use the StatefulSet DDP example which tests NCCL communication across nodes:
 
 ```bash
-srun --nodes=4 --ntasks-per-node=8 --gpus-per-node=8 --mpi=pmix \
-  --container-image=ghcr.io/ahmabboud/gpu_cluster_testing:latest \
-  bash -c '
-    export NCCL_IB_DISABLE=0
-    export NCCL_DEBUG=INFO
-    cd /workspace/nccl-tests
-    ./build/all_reduce_perf_mpi -b 512M -e 8G -f 2 -g 1
-  '
+kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
+kubectl logs -f pod/gpu-cluster-test-ddp-0
 ```
 
-**Expected**: Scales with number of nodes while maintaining >200 GB/s per node
+The DDP training test validates NCCL multi-node communication via InfiniBand.
 
 ## Interpreting Results
 
@@ -246,38 +226,36 @@ srun --nodes=4 --ntasks-per-node=8 --gpus-per-node=8 --mpi=pmix \
 
 ### If Multi-Node Tests Fail
 
-1. **Check MPI Setup**:
+1. **Check Pod Connectivity**:
    ```bash
-   srun --nodes=2 hostname  # Should show both nodes
+   kubectl exec -it gpu-cluster-test-ddp-0 -- ping gpu-cluster-test-ddp-1.gpu-cluster-test-ddp
    ```
 
-2. **Verify InfiniBand Connectivity**:
+2. **Verify InfiniBand from Container**:
    ```bash
-   srun --nodes=2 ibstatus  # Should show active ports
+   kubectl exec -it gpu-cluster-test-ddp-0 -- ibstatus
    ```
 
-3. **Test Basic NCCL**:
-   ```bash
-   # Start with 2 GPUs, 2 nodes
-   srun --nodes=2 --ntasks=2 --gpus-per-task=1 --mpi=pmix \
-     all_reduce_perf_mpi -b 1M -e 1M -g 1
-   ```
+3. **Check NCCL Debug Logs**:
+   Add `NCCL_DEBUG=INFO` environment variable to the pod spec and review logs for transport selection.
 
 ## Integration with Full Training Tests
 
 **Recommended Workflow**:
 
-1. **Quick NCCL Check** (5 min):
+1. **Quick Single-Node Test** (5 min):
    ```bash
-   sbatch examples/slurm-nccl-test.sh
+   kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
+   kubectl logs -f pod/gpu-cluster-test-multi-gpu-single-node
    ```
-   ➜ Validates raw network performance
+   ➜ Validates NCCL over NVLink/InfiniBand during DDP
 
-2. **Full Training Test** (20 min):
+2. **Multi-Node Test** (10 min):
    ```bash
-   sbatch examples/slurm-multi-node.sbatch
+   kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
+   kubectl logs -f pod/gpu-cluster-test-ddp-0
    ```
-   ➜ Validates complete ML stack
+   ➜ Validates multi-node NCCL communication
 
 3. **Compare Results**:
    - NCCL bandwidth should be close to hardware limits
@@ -310,11 +288,10 @@ srun --nodes=4 --ntasks-per-node=8 --gpus-per-node=8 --mpi=pmix \
 - **Use NCCL tests** for quick infrastructure validation and network debugging
 - **Use full training tests** for realistic acceptance testing
 - **Both approaches** are complementary and recommended for comprehensive cluster validation
-- **Start with NCCL** to verify network, then run full training to verify complete stack
+- **Start with single-node** to verify NVLink, then run multi-node to verify InfiniBand
 
 ## Further Reading
 
 - [NVIDIA NCCL Tests GitHub](https://github.com/NVIDIA/nccl-tests)
 - [NCCL Documentation](https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/)
 - [InfiniBand Performance Tuning](https://docs.nvidia.com/networking/display/MLNXOFEDv461000/Performance+Tuning)
-- [Our Main Acceptance Playbook](ACCEPTANCE_PLAYBOOK.md)

@@ -121,49 +121,6 @@ echo "Cleanup complete"
 
 ---
 
-### 🖥️ Slurm
-
-**Default Behavior**: Jobs terminate, logs remain in `results/` directory
-
-**Current Examples**: Logs persist for later analysis
-
-```bash
-# Job terminates automatically after completion
-sbatch examples/slurm-nccl-test.sh
-
-# Logs remain at:
-results/nccl_bandwidth_<jobid>.out
-```
-
-#### Manual Cleanup
-
-```bash
-# View job history
-sacct -S today
-
-# Cancel running jobs
-scancel <jobid>
-
-# Clean up old log files
-find results/ -name "*.out" -mtime +7 -delete  # Delete logs older than 7 days
-```
-
-#### Automatic Log Cleanup (Optional)
-
-Add to your sbatch script:
-
-```bash
-#!/bin/bash
-#SBATCH --job-name=nccl-test
-
-# ... test commands ...
-
-# Clean up old logs at the end
-find results/ -name "*.out" -mtime +7 -delete
-```
-
----
-
 ## Recommended Cleanup Strategies
 
 ### For Development/Testing
@@ -171,7 +128,6 @@ find results/ -name "*.out" -mtime +7 -delete
 **Keep resources** for debugging:
 - Kubernetes: Don't set TTL, manually delete after inspection
 - Docker: Omit `--rm` flag if you need to inspect container
-- Slurm: Keep logs indefinitely
 
 ### For CI/CD Pipelines
 
@@ -190,12 +146,6 @@ spec:
 docker run --rm ...  # Auto-cleanup on exit
 ```
 
-**Slurm**:
-```bash
-# Add to end of sbatch script
-trap "find results/ -name '*_${SLURM_JOB_ID}.out' -delete" EXIT
-```
-
 ### For Production Acceptance Testing
 
 **Balanced approach**:
@@ -206,12 +156,6 @@ spec:
   ttlSecondsAfterFinished: 86400  # Keep for 24 hours
   runPolicy:
     cleanPodPolicy: None  # Keep all pods for forensics
-```
-
-**Slurm**:
-```bash
-# Keep logs for 30 days
-find results/ -name "*.out" -mtime +30 -delete
 ```
 
 ---
@@ -226,15 +170,6 @@ find results/ -name "*.out" -mtime +30 -delete
 
 **Kubernetes pod logs**:
 - Check with: `kubectl get pods -o json | jq '[.items[] | {name: .metadata.name, logs: .status.containerStatuses[].state}]'`
-
-**Slurm results directory**:
-```bash
-# Check disk usage
-du -sh results/
-
-# Count log files
-ls -1 results/*.out | wc -l
-```
 
 ### Cleanup Thresholds
 
@@ -284,33 +219,6 @@ spec:
           restartPolicy: OnFailure
 ```
 
-### Slurm Cleanup Script
-
-```bash
-#!/bin/bash
-# /usr/local/bin/cleanup-slurm-tests.sh
-# Add to cron: 0 2 * * * /usr/local/bin/cleanup-slurm-tests.sh
-
-RESULTS_DIR="/opt/slurm-test/quickcheck/results"
-RETENTION_DAYS=7
-
-echo "$(date): Cleaning up test results older than ${RETENTION_DAYS} days"
-
-# Delete old NCCL test logs
-find "${RESULTS_DIR}" -name "nccl_*.out" -mtime +${RETENTION_DAYS} -delete
-
-# Delete old training test logs
-find "${RESULTS_DIR}" -name "training_*.out" -mtime +${RETENTION_DAYS} -delete
-
-# Report disk usage
-du -sh "${RESULTS_DIR}"
-```
-
-Add to crontab:
-```bash
-0 2 * * * /usr/local/bin/cleanup-slurm-tests.sh >> /var/log/cleanup-tests.log 2>&1
-```
-
 ---
 
 ## Best Practices
@@ -319,10 +227,9 @@ Add to crontab:
 
 1. **Set TTL for Kubernetes jobs** in production (24-48 hours)
 2. **Use `--rm` for Docker** in examples and CI/CD
-3. **Implement log rotation** for Slurm results
-4. **Keep failed jobs longer** than successful ones for debugging
-5. **Monitor disk usage** in results directories
-6. **Document cleanup policy** in your runbooks
+3. **Keep failed jobs longer** than successful ones for debugging
+4. **Monitor disk usage** in results directories
+5. **Document cleanup policy** in your runbooks
 
 ### ❌ DON'T
 
@@ -369,20 +276,6 @@ docker container prune -f
 docker image prune -a --filter "until=24h"
 ```
 
-### Slurm
-
-```bash
-# Cancel all queued/running test jobs
-squeue -u $USER -n gpu-test -h -o "%i" | xargs scancel
-
-# Clean up logs older than 7 days
-find results/ -name "*.out" -mtime +7 -delete
-
-# Archive old logs
-tar -czf results-archive-$(date +%Y%m%d).tar.gz results/*.out
-mv results-archive-*.tar.gz /path/to/archive/
-```
-
 ---
 
 ## Monitoring Cleanup
@@ -410,16 +303,6 @@ docker ps -a --format "table {{.Names}}\t{{.Size}}\t{{.Status}}"
 docker images --filter=reference='*gpu_cluster_testing*' --format "{{.Size}}"
 ```
 
-**Slurm**:
-```bash
-# Disk usage of results
-du -sh results/
-
-# Count log files by age
-find results/ -name "*.out" -mtime -1 | wc -l  # < 1 day
-find results/ -name "*.out" -mtime +7 | wc -l  # > 7 days
-```
-
 ---
 
 ## Summary
@@ -430,19 +313,16 @@ find results/ -name "*.out" -mtime +7 | wc -l  # > 7 days
 |----------|---------------|----------------|
 | Docker | ✅ Yes (`--rm` in all examples) | No changes needed |
 | Kubernetes | ❌ No | Add TTL for production |
-| Slurm | ⚠️ Partial (jobs end, logs stay) | Add log rotation |
 
 ### Action Items
 
 1. **Kubernetes users**: Add `ttlSecondsAfterFinished` to PyTorchJob specs
-2. **Slurm users**: Implement log rotation script
-3. **All users**: Monitor disk usage in results directories
-4. **CI/CD**: Ensure automatic cleanup is configured
+2. **All users**: Monitor disk usage in results directories
+3. **CI/CD**: Ensure automatic cleanup is configured
 
 ### Files Updated
 
-- [examples/kubernetes-mixed-cluster-with-ttl.yaml](../examples/kubernetes-mixed-cluster-with-ttl.yaml) - NEW: Example with automatic cleanup
-- [scripts/cleanup-k8s-tests.sh](../scripts/cleanup-k8s-tests.sh) - NEW: Automated K8s cleanup
-- [scripts/cleanup-slurm-logs.sh](../scripts/cleanup-slurm-logs.sh) - NEW: Automated Slurm log cleanup
+- [examples/kubernetes-with-auto-cleanup.yaml](../examples/kubernetes-with-auto-cleanup.yaml) - Example with automatic cleanup
+- [scripts/cleanup-k8s-tests.sh](../scripts/cleanup-k8s-tests.sh) - Automated K8s cleanup
 
 See the examples directory for reference implementations.

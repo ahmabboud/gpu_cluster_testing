@@ -24,11 +24,11 @@ gpu_cluster_testing/
 ├── 📂 examples/                           # Deployment examples
 │   ├── kubernetes-flexible-nebius-pattern.yaml
 │   ├── kubernetes-mixed-cluster.yaml
-│   ├── kubernetes-simple.yaml
-│   ├── kubernetes-two-nodes.yaml
-│   ├── pytorchjob-example.yaml
-│   ├── slurm-multi-node.sh
-│   └── slurm-single-node.sh
+│   ├── kubernetes-pod-single-gpu.yaml
+│   ├── kubernetes-pod-multi-gpu-single-node.yaml
+│   ├── kubernetes-statefulset-multi-node-ddp.yaml
+│   ├── kubernetes-with-auto-cleanup.yaml
+│   └── pytorchjob-example.yaml
 │
 ├── 📂 scripts/                            # Runtime scripts
 │   └── 🔧 entrypoint.sh                  # Universal environment detection (241 lines)
@@ -58,7 +58,7 @@ gpu_cluster_testing/
 | **Dockerfile** | 65 | AMD64 container with NVIDIA PyTorch 24.07, CUDA 12.5 |
 | **README.md** | 606 | Main documentation, quick start, usage examples |
 | **.github/workflows/ci.yml** | 116 | CI/CD: validate → test → build → push to ghcr.io |
-| **scripts/entrypoint.sh** | 241 | Auto-detects Kubernetes/Slurm/bare metal, sets up NCCL |
+| **scripts/entrypoint.sh** | 241 | Auto-detects Kubernetes/Docker environment, sets up NCCL |
 
 **Key Features**:
 - UCX/UCC library path fix (lines 15-19 in entrypoint.sh)
@@ -112,8 +112,8 @@ Run with: `python -m pytest tests/ -v`
 ### 📦 Deployment Examples
 
 7 example files covering:
-- Kubernetes (PyTorchJob, plain Pods)
-- Slurm (single-node, multi-node)
+- Kubernetes (PyTorchJob, plain Pods, StatefulSets)
+- Docker (local testing)
 - Flexible GPU configuration (Nebius pattern)
 
 ## Key Technologies
