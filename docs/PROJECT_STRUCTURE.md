@@ -33,7 +33,10 @@ gpu_cluster_testing/
 │   └── kubernetes-multi-gpu-nebius-optimized.yaml
 │
 ├── 📂 scripts/                            # Runtime scripts
-│   └── 🔧 entrypoint.sh                  # Universal environment detection (241 lines)
+│   ├── 🔧 entrypoint.sh                  # Universal environment detection
+│   ├── 🧪 run-all-tests.sh               # Full test suite runner
+│   ├── 🧹 cleanup-k8s-tests.sh           # Kubernetes resource cleanup
+│   └── 🔍 verify-k8s-gpu-cluster.sh      # GPU cluster verification
 │
 ├── 📂 src/                                # Source code
 │   ├── 🎓 train.py                       # Main training orchestrator (506 lines)
@@ -55,18 +58,20 @@ gpu_cluster_testing/
 
 ### 🔴 Core Infrastructure
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| **Dockerfile** | 65 | AMD64 container with NVIDIA PyTorch 24.07, CUDA 12.5 |
-| **README.md** | 606 | Main documentation, quick start, usage examples |
-| **.github/workflows/ci.yml** | 116 | CI/CD: validate → test → build → push to ghcr.io |
-| **scripts/entrypoint.sh** | 241 | Auto-detects Kubernetes/Docker environment, sets up NCCL |
+| File | Purpose |
+|------|---------|
+| **Dockerfile** | AMD64 container with NVIDIA PyTorch 24.07, CUDA 12.5 |
+| **README.md** | Main documentation, quick start, usage examples |
+| **.github/workflows/ci.yml** | CI/CD: validate → test → build → push to ghcr.io |
 
-**Key Features**:
-- UCX/UCC library path fix (lines 15-19 in entrypoint.sh)
-- Python command auto-detection (python vs python3)
-- InfiniBand/RDMA detection and NCCL configuration
-- Dynamic GPU count detection
+### 🔧 Scripts
+
+| File | Purpose |
+|------|---------|
+| **scripts/entrypoint.sh** | Container entrypoint, environment detection, NCCL setup |
+| **scripts/run-all-tests.sh** | Full test suite runner (Single GPU → Multi-GPU → Multi-Node DDP) |
+| **scripts/cleanup-k8s-tests.sh** | Kubernetes resource cleanup |
+| **scripts/verify-k8s-gpu-cluster.sh** | GPU cluster verification |
 
 ### 🟢 Training Code
 

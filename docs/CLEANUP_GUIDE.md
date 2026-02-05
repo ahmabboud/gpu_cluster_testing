@@ -2,7 +2,36 @@
 
 ## Overview
 
-By default, test resources remain in the cluster after completion to allow for log inspection and debugging. This guide explains the cleanup behavior and how to configure automatic cleanup.
+The test runner script (`./scripts/run-all-tests.sh`) automatically cleans up resources before and after each test. This guide covers manual cleanup options.
+
+---
+
+## Automatic Cleanup (Recommended)
+
+```bash
+# The test runner handles cleanup automatically
+./scripts/run-all-tests.sh
+```
+
+## Manual Cleanup
+
+### Quick Commands
+
+```bash
+# Delete all test pods
+kubectl delete pod -l app=gpu-cluster-test --ignore-not-found=true
+
+# Delete StatefulSet and Service (multi-node test)
+kubectl delete statefulset gpu-cluster-test-ddp --ignore-not-found=true
+kubectl delete service gpu-cluster-test-ddp --ignore-not-found=true
+
+# Delete specific test pods
+kubectl delete pod gpu-cluster-test-single-gpu --ignore-not-found=true
+kubectl delete pod gpu-cluster-test-multi-gpu-single-node --ignore-not-found=true
+
+# Or use the cleanup script
+./scripts/cleanup-k8s-tests.sh
+```
 
 ---
 
@@ -10,13 +39,11 @@ By default, test resources remain in the cluster after completion to allow for l
 
 ### ☸️ Kubernetes
 
-**Default Behavior**: ⚠️ Pods and Jobs remain after completion for log inspection.
+**Default Behavior**: Pods remain after completion for log inspection.
 
-#### Automatic Cleanup Options
+#### Automatic Cleanup with TTL (PyTorchJob)
 
-**Option 1: TTL Controller (Recommended)**
-
-Add TTL to your Job or PyTorchJob:
+If using PyTorchJob CRD, add TTL:
 
 ```yaml
 apiVersion: kubeflow.org/v1
@@ -34,7 +61,7 @@ spec:
       # ... rest of spec
 ```
 
-**Option 2: Job Lifecycle Policy**
+**Job Lifecycle Policy** (PyTorchJob only):
 
 ```yaml
 apiVersion: kubeflow.org/v1

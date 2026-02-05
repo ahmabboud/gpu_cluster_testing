@@ -1,5 +1,23 @@
 # GPU Cluster Testing Workflow
 
+## Quick Start: Run All Tests
+
+```bash
+# Run the complete test suite
+./scripts/run-all-tests.sh
+
+# With custom timeout (for autoscaling clusters)
+./scripts/run-all-tests.sh --timeout 900
+
+# Run specific test only
+./scripts/run-all-tests.sh --test 1   # Single GPU
+./scripts/run-all-tests.sh --test 2   # Multi-GPU
+./scripts/run-all-tests.sh --test 3   # Multi-Node DDP
+
+# Skip multi-node test
+./scripts/run-all-tests.sh --skip-multinode
+```
+
 ## Decision Tree: Which Test to Run?
 
 ```

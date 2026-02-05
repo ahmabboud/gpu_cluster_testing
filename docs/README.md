@@ -79,7 +79,9 @@ All examples are in the `examples/` directory:
 |------|---------|------|
 | `kubernetes-pod-single-gpu.yaml` | Single GPU smoke test | 1 |
 | `kubernetes-pod-multi-gpu-single-node.yaml` | Multi-GPU DDP test | 2+ |
-| `kubernetes-statefulset-multi-node-ddp.yaml` | Multi-node distributed training | 2+ nodes |
+| `kubernetes-statefulset-multi-node-ddp.yaml` | Multi-node InfiniBand DDP | 2+ nodes |
+| `kubernetes-multi-gpu-nebius-optimized.yaml` | Nebius-optimized multi-GPU | 8 |
+| `kubernetes-flexible-nebius-pattern.yaml` | Flexible Nebius deployment | Variable |
 | `kubernetes-with-auto-cleanup.yaml` | Auto-cleanup with TTL | - |
 | `kubernetes-mixed-cluster.yaml` | Mixed GPU/non-GPU clusters | - |
 
@@ -88,7 +90,10 @@ All examples are in the `examples/` directory:
 ## 🚀 Quick Commands
 
 ```bash
-# Single GPU test
+# Run all tests (recommended)
+./scripts/run-all-tests.sh
+
+# Or run individual tests
 kubectl apply -f examples/kubernetes-pod-single-gpu.yaml
 kubectl logs -f pod/gpu-cluster-test-single-gpu
 

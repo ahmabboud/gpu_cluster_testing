@@ -36,6 +36,15 @@ spec:
         app: gpu-cluster-test
         mode: multi-node-ddp
     spec:
+      # Force pods to different nodes for true multi-node InfiniBand testing
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: gpu-cluster-test
+                mode: multi-node-ddp
+            topologyKey: kubernetes.io/hostname
       containers:
       - name: test
         image: ghcr.io/ahmabboud/gpu_cluster_testing:latest

@@ -12,16 +12,48 @@ A portable, scale-agnostic tool for validating GPU cluster health, performance, 
 
 This tool provides **three types of tests** for comprehensive GPU cluster validation:
 
-| Test Type | What It Validates | Duration | Command |
-|-----------|-------------------|----------|---------|
-| **🔥 Smoke Test (Training)** | GPU compute, memory, DDP | 5-10 min | `kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml` |
-| **📡 NCCL Bandwidth Test** | NVLink/InfiniBand throughput | 2-5 min | See [NCCL Testing Guide](docs/NCCL_TESTING.md) |
-| **🔌 InfiniBand Verification** | RDMA connectivity, IB status | 1 min | See [InfiniBand Guide](docs/INFINIBAND_CONFIGURATION.md) |
+| Test Type | What It Validates | Duration | Nodes Required |
+|-----------|-------------------|----------|----------------|
+| **🔥 Single GPU Training** | GPU compute, memory, PyTorch | 2-3 min | 1 GPU node |
+| **📡 Multi-GPU NCCL** | NVLink, intra-node communication | 3-5 min | 1 GPU node (2+ GPUs) |
+| **🌐 Multi-Node DDP** | InfiniBand, inter-node RDMA, distributed training | 5-10 min | 2 GPU nodes |
 
-**Recommended workflow:**
-1. **InfiniBand check** → Verify hardware connectivity
-2. **NCCL test** → Validate network bandwidth
-3. **Training smoke test** → Confirm end-to-end ML workload
+## Quick Start
+
+### Run All Tests (Recommended)
+
+```bash
+# Run the complete test suite
+./scripts/run-all-tests.sh
+
+# With longer timeout for autoscaling clusters
+./scripts/run-all-tests.sh --timeout 900
+
+# Skip multi-node test (single GPU node only)
+./scripts/run-all-tests.sh --skip-multinode
+```
+
+The script automatically:
+- Cleans up previous test resources
+- Runs all tests in sequence
+- Reports pass/fail for each test
+- Cleans up after completion
+
+### Run Individual Tests
+
+```bash
+# Single GPU test
+kubectl apply -f examples/kubernetes-pod-single-gpu.yaml
+kubectl logs -f pod/gpu-cluster-test-single-gpu
+
+# Multi-GPU test (single node)
+kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
+kubectl logs -f pod/gpu-cluster-test-multi-gpu-single-node
+
+# Multi-Node DDP test (requires 2 GPU nodes)
+kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
+kubectl logs -f pod/gpu-cluster-test-ddp-0
+```
 
 ## Features
 
@@ -388,6 +420,18 @@ Both approaches are complementary. See [NCCL Testing Guide](docs/NCCL_TESTING.md
 | `NCCL_DEBUG` | NCCL logging level | `INFO` |
 | `NCCL_SOCKET_IFNAME` | Network interface for NCCL | Auto-detected |
 
+## CI/CD Pipeline
+
+The repository includes automated CI/CD via GitHub Actions (`.github/workflows/ci.yml`):
+
+| Stage | Trigger | Actions |
+|-------|---------|---------|
+| **Validate** | All pushes/PRs | Python syntax check, unit tests |
+| **Build & Push** | Push to `main` (if code changed) | Build Docker image, push to `ghcr.io` |
+| **Smoke Test** | After build | Pull and verify container |
+
+**Automatic image updates**: When you push to `main` and modify `Dockerfile`, `src/`, or `scripts/`, the CI automatically builds and pushes a new image to `ghcr.io/ahmabboud/gpu_cluster_testing:latest`.
+
 ## Building from Source
 
 ```bash
@@ -406,31 +450,21 @@ sed -i 's|ghcr.io/ahmabboud/|ghcr.io/YOUR_USERNAME/|g' examples/*.yaml
 
 ## Resource Cleanup
 
-⚠️ **Important**: By default, test resources remain in the cluster after completion for log inspection.
-
-### Cleanup Behavior
-
-Kubernetes jobs/pods remain after completion for log inspection. Use TTL or manual cleanup.
+The test runner script (`./scripts/run-all-tests.sh`) automatically cleans up all test resources before and after running. For manual cleanup:
 
 ### Quick Cleanup Commands
 
 **Kubernetes**:
 ```bash
-# Delete specific test
-kubectl delete pytorchjob gpu-cluster-acceptance-test
+# Delete all test pods
+kubectl delete pod -l app=gpu-cluster-test --ignore-not-found=true
 
-# Delete all completed tests
-kubectl delete pytorchjob -l app=gpu-acceptance-test
+# Delete StatefulSet and Service
+kubectl delete statefulset gpu-cluster-test-ddp --ignore-not-found=true
+kubectl delete service gpu-cluster-test-ddp --ignore-not-found=true
 
-# Automated cleanup script
-./scripts/cleanup-k8s-tests.sh default 24  # Clean up tests older than 24h
-```
-
-### Automatic Cleanup (Kubernetes)
-
-Use the example with TTL for automatic cleanup:
-```bash
-kubectl apply -f examples/kubernetes-with-auto-cleanup.yaml
+# Or use the cleanup script
+./scripts/cleanup-k8s-tests.sh
 ```
 
 **See**: [docs/CLEANUP_GUIDE.md](docs/CLEANUP_GUIDE.md) for complete cleanup documentation.
@@ -530,45 +564,34 @@ Contributions are welcome! Please see the [Implementation Plan](docs/Exercise%20
 
 ### Quick Start (Single GPU, No Operator Required)
 ```bash
+### Run All Tests (Recommended)
+```bash
+./scripts/run-all-tests.sh --timeout 900
+```
+Runs Single GPU → Multi-GPU → Multi-Node DDP with automatic cleanup.
+
+### Single GPU Test
+```bash
 kubectl apply -f examples/kubernetes-pod-single-gpu.yaml
 kubectl logs -f pod/gpu-cluster-test-single-gpu
 ```
-Simple single-GPU test using plain Pod—works on any Kubernetes cluster with GPUs.
+Simple single-GPU test—works on any Kubernetes cluster with GPUs.
 
-### Multi-GPU Single Node (No Operator Required)
+### Multi-GPU Single Node
 ```bash
 kubectl apply -f examples/kubernetes-pod-multi-gpu-single-node.yaml
 kubectl logs -f pod/gpu-cluster-test-multi-gpu-single-node
 ```
-Single-node torchrun DDP test.
+Single-node torchrun DDP test with NCCL.
 
-### Multi-Node DDP (No Operator Required)
+### Multi-Node DDP (InfiniBand)
 ```bash
 kubectl apply -f examples/kubernetes-statefulset-multi-node-ddp.yaml
 kubectl logs -f pod/gpu-cluster-test-ddp-0
 ```
-StatefulSet + headless service for multi-node DDP without PyTorchJob CRD.
+StatefulSet with anti-affinity for true multi-node RDMA/InfiniBand testing.
 
-### Production (Multi-GPU H100 Cluster, PyTorchJob)
-```bash
-kubectl apply -f examples/kubernetes-multi-gpu-nebius-optimized.yaml
-```
-Fixed 8-GPU configuration for high-performance clusters (requires PyTorchJob CRD).
-
-### Standard (Any Kubernetes Cluster, PyTorchJob)
-```bash
-kubectl apply -f examples/kubernetes-mixed-cluster.yaml
-```
-Works on clusters with dedicated GPU nodes (requires PyTorchJob CRD).
-
-See `examples/` directory for:
-- **kubernetes-pod-single-gpu.yaml** - Simple single-GPU Pod (no operator required)
-- **kubernetes-pod-multi-gpu-single-node.yaml** - Multi-GPU single-node torchrun (no operator required)
-- **kubernetes-statefulset-multi-node-ddp.yaml** - Multi-node DDP via StatefulSet (no operator required)
-- **kubernetes-flexible-nebius-pattern.yaml** - Configurable GPU count (PyTorchJob CRD required)
-- **kubernetes-multi-gpu-nebius-optimized.yaml** - Fixed 8-GPU H100 configuration (PyTorchJob CRD required)
-- **kubernetes-mixed-cluster.yaml** - Mixed GPU/non-GPU clusters (PyTorchJob CRD required)
-- **kubernetes-with-auto-cleanup.yaml** - Automated cleanup configuration (PyTorchJob CRD required)
+See `examples/` directory for all Kubernetes manifests.
 
 ## License
 
